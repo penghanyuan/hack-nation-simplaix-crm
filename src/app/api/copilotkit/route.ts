@@ -2,16 +2,15 @@ import {
   CopilotRuntime,
   ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
-  GoogleGenerativeAIAdapter
+  AnthropicAdapter
 } from "@copilotkit/runtime";
 import { HttpAgent } from "@ag-ui/client";
 import { NextRequest } from "next/server";
  
 // 1. You can use any service adapter here for multi-agent support. We use
 //    the empty adapter since we're only using one agent.
-const serviceAdapter = new GoogleGenerativeAIAdapter({
-  model: "gemini-2.5-flash",
-  apiKey: process.env.GOOGLE_AI_STUDIO_KEY,
+const serviceAdapter = new AnthropicAdapter({
+  model: "claude-sonnet-4-20250514"
 });
  
 // 2. Create the CopilotRuntime instance and utilize the PydanticAI AG-UI

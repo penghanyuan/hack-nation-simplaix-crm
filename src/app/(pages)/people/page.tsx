@@ -27,27 +27,26 @@ export default function PeoplePage() {
   }, [])
 
   return (
-    <>
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-4">
+    <div className="flex flex-col h-full overflow-hidden">
+      <header className="flex h-12 sm:h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-2 sm:px-4">
         <SidebarTrigger className="text-neutral-700 hover:bg-neutral-100 focus:outline-none focus:ring-2 focus:ring-neutral-300" />
-        <h1 className="text-lg font-semibold text-neutral-900">People</h1>
+        <h1 className="text-base sm:text-lg font-semibold text-neutral-900 truncate">People</h1>
       </header>
-      <div className="flex-1 p-6">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm text-neutral-500">
+      <div className="flex-1 p-2 sm:p-4 md:p-6 overflow-hidden flex flex-col min-h-0">
+        <div className="mb-3 sm:mb-4 md:mb-6 shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-neutral-500 truncate">
                 All People · {contacts.length}
               </p>
             </div>
-            <button className="bg-neutral-800 text-neutral-50 rounded-md px-4 py-2 hover:bg-neutral-900 active:bg-neutral-950 shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-300 text-sm font-medium">
-              + Add New
-            </button>
           </div>
         </div>
-        <PeopleTable contacts={contacts} isLoading={isLoading} />
+        <div className="flex-1 min-h-0">
+          <PeopleTable contacts={contacts} isLoading={isLoading} />
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
