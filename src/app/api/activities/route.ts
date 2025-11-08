@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import type { Activity } from "@/lib/types"
 import { db } from "@/db"
-import { interactions } from "@/db/schema"
+import { interactions, activities } from "@/db/schema"
+import { desc, eq } from "drizzle-orm"
 
 // Mock data - replace with real database queries later
 const mockActivities: Activity[] = [
@@ -58,12 +59,53 @@ const mockActivities: Activity[] = [
 
 export async function GET() {
   try {
-    // Sort by timestamp descending (newest first)
-    const sortedActivities = mockActivities.sort(
-      (a, b) => b.timestamp.getTime() - a.timestamp.getTime()
-    )
+    // Fetch pending activities from database
+    const dbActivities = await db
+      .select()
+      .from(activities)
+      .where(eq(activities.status, 'pending'))
+      .orderBy(desc(activities.createdAt))
+      .limit(20)
 
-    return NextResponse.json(sortedActivities)
+    // Transform database activities to frontend Activity format
+    const transformedActivities: Activity[] = dbActivities.map((activity) => {
+      const extractedData = activity.extractedData as any
+
+      let title = ''
+      let description = ''
+
+      if (activity.entityType === 'contact') {
+        title = `${extractedData.name}`
+        description = extractedData.email
+        if (extractedData.companyName) {
+          description += ` • ${extractedData.companyName}`
+        }
+        if (extractedData.title) {
+          description += ` • ${extractedData.title}`
+        }
+      } else if (activity.entityType === 'task') {
+        title = `${extractedData.title}`
+        description = ''
+        if (extractedData.companyName) {
+          description += `${extractedData.companyName} • `
+        }
+        description += `Stage: ${extractedData.stage}`
+        if (extractedData.amount) {
+          description += ` • $${extractedData.amount.toLocaleString()}`
+        }
+      }
+
+      return {
+        id: activity.id,
+        type: 'email' as const,
+        title,
+        description,
+        timestamp: activity.createdAt,
+        entityType: activity.entityType as 'contact' | 'task',
+      }
+    })
+
+    return NextResponse.json(transformedActivities)
   } catch (error) {
     console.error("Error fetching activities:", error)
     return NextResponse.json(

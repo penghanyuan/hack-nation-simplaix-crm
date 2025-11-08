@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeEmail, type EmailData } from '@/lib/ai';
 import { db } from '@/db';
-import { contacts, deals } from '@/db/schema';
+import { contacts, deals, activities } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 /**
  * POST /api/ai/analyze-email
@@ -36,14 +37,53 @@ export async function POST(request: NextRequest) {
     // Analyze the email (multi-step agent extracts both contacts and tasks)
     const analysis = await analyzeEmail(email as EmailData, { model: 'gpt-5-mini-2025-08-07' });
 
-    // If autoInsert is true, insert into database
+    // Save all extracted data as pending activities
+    const createdActivities = [];
+
+    // Create activity for each extracted contact
+    for (const contactData of analysis.contacts) {
+      const [activity] = await db
+        .insert(activities)
+        .values({
+          entityType: 'contact',
+          status: 'pending',
+          extractedData: contactData,
+          sourceEmailSubject: email.subject,
+          sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
+          sourceEmailDate: email.date ? new Date(email.date) : new Date(),
+        })
+        .returning();
+
+      createdActivities.push(activity);
+    }
+
+    // Create activity for each extracted task
+    for (const taskData of analysis.tasks) {
+      const [activity] = await db
+        .insert(activities)
+        .values({
+          entityType: 'task',
+          status: 'pending',
+          extractedData: taskData,
+          sourceEmailSubject: email.subject,
+          sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
+          sourceEmailDate: email.date ? new Date(email.date) : new Date(),
+        })
+        .returning();
+
+      createdActivities.push(activity);
+    }
+
+    // If autoInsert is true, auto-accept all activities
     let insertedData = null;
     if (autoInsert) {
       const insertedContacts = [];
       const insertedTasks = [];
 
-      // Insert all extracted contacts
-      for (const contactData of analysis.contacts) {
+      // Auto-accept contact activities
+      for (const activity of createdActivities.filter(a => a.entityType === 'contact')) {
+        const contactData = activity.extractedData as typeof analysis.contacts[0];
+
         // Check if contact already exists
         const existingContact = await db.query.contacts.findFirst({
           where: (contacts, { eq }) => eq(contacts.email, contactData.email),
@@ -54,33 +94,52 @@ export async function POST(request: NextRequest) {
             .insert(contacts)
             .values(contactData)
             .returning();
-          
+
           insertedContacts.push({ data: newContact, existed: false });
+
+          // Mark activity as accepted
+          await db
+            .update(activities)
+            .set({ status: 'accepted', processedAt: new Date() })
+            .where(eq(activities.id, activity.id));
         } else {
           insertedContacts.push({ data: existingContact, existed: true });
+
+          // Mark activity as accepted (but contact existed)
+          await db
+            .update(activities)
+            .set({ status: 'accepted', processedAt: new Date() })
+            .where(eq(activities.id, activity.id));
         }
       }
 
-      // Insert all extracted tasks
-      for (const taskData of analysis.tasks) {
-        // Note: deals table has contactEmail (singular), so we take the first email from the array
+      // Auto-accept task activities
+      for (const activity of createdActivities.filter(a => a.entityType === 'task')) {
+        const taskData = activity.extractedData as typeof analysis.tasks[0];
+
         const [newTask] = await db
           .insert(deals)
           .values({
             title: taskData.title,
             companyName: taskData.companyName,
-            contactEmail: taskData.contactEmails[0] || null, // Take first contact email
-            stage: taskData.stage,
+            contactEmail: taskData.contactEmails[0] || null,
+            stage: taskData.stage as any,
             amount: taskData.amount,
             nextAction: taskData.nextAction,
-            nextActionDate: taskData.nextActionDate 
-              ? new Date(taskData.nextActionDate) 
+            nextActionDate: taskData.nextActionDate
+              ? new Date(taskData.nextActionDate)
               : undefined,
             lastActivityAt: new Date(),
           })
           .returning();
-        
+
         insertedTasks.push(newTask);
+
+        // Mark activity as accepted
+        await db
+          .update(activities)
+          .set({ status: 'accepted', processedAt: new Date() })
+          .where(eq(activities.id, activity.id));
       }
 
       insertedData = {
@@ -92,6 +151,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       analysis,
+      activities: createdActivities,
       inserted: insertedData,
     });
 

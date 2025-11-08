@@ -37,6 +37,17 @@ export const pendingChangeEntityTypeEnum = pgEnum('pending_change_entity_type', 
   'deal'
 ]);
 
+export const activityStatusEnum = pgEnum('activity_status', [
+  'pending',
+  'accepted',
+  'rejected'
+]);
+
+export const activityEntityTypeEnum = pgEnum('activity_entity_type', [
+  'contact',
+  'task'
+]);
+
 // Tables
 export const contacts = pgTable('contacts', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -44,6 +55,10 @@ export const contacts = pgTable('contacts', {
   email: text('email').notNull().unique(),
   companyName: text('company_name'),
   title: text('title'),
+  phone: text('phone'),
+  city: text('city'),
+  linkedin: text('linkedin'),
+  x: text('x'), // Twitter/X handle
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -100,8 +115,22 @@ export const userSettings = pgTable('user_settings', {
   gmailTokenExpiry: timestamp('gmail_token_expiry'),
   autoApproveMode: boolean('auto_approve_mode').default(false).notNull(),
   lastGmailSync: timestamp('last_gmail_sync'),
+  lastActivitySync: timestamp('last_activity_sync'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const activities = pgTable('activities', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  entityType: activityEntityTypeEnum('entity_type').notNull(),
+  status: activityStatusEnum('status').default('pending').notNull(),
+  extractedData: jsonb('extracted_data').notNull(),
+  sourceInteractionId: uuid('source_interaction_id').references(() => interactions.id),
+  sourceEmailSubject: text('source_email_subject'),
+  sourceEmailFrom: text('source_email_from'),
+  sourceEmailDate: timestamp('source_email_date'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  processedAt: timestamp('processed_at'),
 });
 
 // Types
@@ -122,4 +151,7 @@ export type NewPendingChange = typeof pendingChanges.$inferInsert;
 
 export type UserSettings = typeof userSettings.$inferSelect;
 export type NewUserSettings = typeof userSettings.$inferInsert;
+
+export type Activity = typeof activities.$inferSelect;
+export type NewActivity = typeof activities.$inferInsert;
 

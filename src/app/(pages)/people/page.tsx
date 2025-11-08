@@ -1,16 +1,27 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useSearchParams } from "next/navigation"
+import useSWR from "swr"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PeopleTable } from "@/components/people-table"
 import { toast } from "sonner"
 import type { Contact } from "@/db/schema"
 
+const fetcher = (url: string) => fetch(url).then((res) => res.json())
+
 export default function PeoplePage() {
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [isLoading, setIsLoading] = useState(true)
   const searchParams = useSearchParams()
+
+  // Use SWR for contacts data
+  const { data: contacts = [], isLoading } = useSWR<Contact[]>(
+    '/api/contacts',
+    fetcher,
+    {
+      refreshInterval: 10000, // Auto-refresh every 10 seconds
+      revalidateOnFocus: true,
+    }
+  )
 
   useEffect(() => {
     // Check for OAuth callback messages
@@ -35,23 +46,6 @@ export default function PeoplePage() {
       window.history.replaceState({}, '', '/people')
     }
   }, [searchParams])
-
-  useEffect(() => {
-    async function fetchContacts() {
-      try {
-        const response = await fetch("/api/contacts")
-        if (!response.ok) throw new Error("Failed to fetch contacts")
-        const data = await response.json()
-        setContacts(data)
-      } catch (error) {
-        console.error("Error fetching contacts:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchContacts()
-  }, [])
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
