@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { userSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getUserSettings } from '@/services/userSettings';
 
 /**
  * GET /api/auth/google/status
@@ -11,26 +9,21 @@ export async function GET() {
   try {
     const userId = 'default'; // For hackathon MVP, using single user
     
-    const settings = await db
-      .select()
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
-      .limit(1);
+    const settings = await getUserSettings(userId);
 
-    if (settings.length === 0 || !settings[0].gmailAccessToken) {
+    if (!settings || !settings.gmailAccessToken) {
       return NextResponse.json({
         isConnected: false,
       });
     }
 
-    const setting = settings[0];
     const now = new Date();
-    const isTokenExpired = setting.gmailTokenExpiry && setting.gmailTokenExpiry < now;
+    const isTokenExpired = settings.gmailTokenExpiry && settings.gmailTokenExpiry < now;
 
     return NextResponse.json({
       isConnected: !isTokenExpired,
-      lastSync: setting.lastGmailSync?.toISOString(),
-      tokenExpiry: setting.gmailTokenExpiry?.toISOString(),
+      lastSync: settings.lastGmailSync?.toISOString(),
+      tokenExpiry: settings.gmailTokenExpiry?.toISOString(),
     });
   } catch (error) {
     console.error('Error checking Gmail status:', error);
@@ -40,4 +33,3 @@ export async function GET() {
     );
   }
 }
-

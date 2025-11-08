@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createOAuth2Client, getTokensFromCode } from '@/lib/gmail';
-import { db } from '@/db';
-import { userSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { saveGmailTokens } from '@/services/userSettings';
 
 /**
  * GET /api/auth/google/callback
@@ -36,38 +34,16 @@ export async function GET(request: NextRequest) {
 
     // Store tokens in database
     const userId = 'default'; // For hackathon MVP, using single user
-    
-    // Check if settings exist
-    const existing = await db
-      .select()
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
-      .limit(1);
 
     const tokenExpiry = tokens.expiry_date 
       ? new Date(tokens.expiry_date)
       : new Date(Date.now() + 3600 * 1000); // 1 hour default
 
-    if (existing.length > 0) {
-      // Update existing settings
-      await db
-        .update(userSettings)
-        .set({
-          gmailAccessToken: tokens.access_token,
-          gmailRefreshToken: tokens.refresh_token || existing[0].gmailRefreshToken,
-          gmailTokenExpiry: tokenExpiry,
-          updatedAt: new Date(),
-        })
-        .where(eq(userSettings.userId, userId));
-    } else {
-      // Insert new settings
-      await db.insert(userSettings).values({
-        userId,
-        gmailAccessToken: tokens.access_token,
-        gmailRefreshToken: tokens.refresh_token,
-        gmailTokenExpiry: tokenExpiry,
-      });
-    }
+    await saveGmailTokens(userId, {
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiry: tokenExpiry,
+    });
 
     // Redirect to people page with success
     return NextResponse.redirect(
@@ -80,4 +56,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

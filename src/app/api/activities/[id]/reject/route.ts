@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { activities } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getActivityById, markActivityStatus } from '@/services/activityService';
 
 /**
  * PATCH /api/activities/[id]/reject
@@ -15,11 +13,7 @@ export async function PATCH(
     const { id } = await params;
 
     // Fetch the activity
-    const [activity] = await db
-      .select()
-      .from(activities)
-      .where(eq(activities.id, id))
-      .limit(1);
+    const activity = await getActivityById(id);
 
     if (!activity) {
       return NextResponse.json(
@@ -36,10 +30,7 @@ export async function PATCH(
     }
 
     // Mark activity as rejected
-    await db
-      .update(activities)
-      .set({ status: 'rejected', processedAt: new Date() })
-      .where(eq(activities.id, id));
+    await markActivityStatus(id, 'rejected');
 
     return NextResponse.json({
       success: true,

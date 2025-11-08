@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { activities, contacts, tasks } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getActivityById, markActivityStatus } from '@/services/activityService';
+import { createContact, getContactByEmail } from '@/services/contactService';
+import { createTask } from '@/services/taskService';
 
 /**
  * PATCH /api/activities/[id]/accept
@@ -15,11 +15,7 @@ export async function PATCH(
     const { id } = await params;
 
     // Fetch the activity
-    const [activity] = await db
-      .select()
-      .from(activities)
-      .where(eq(activities.id, id))
-      .limit(1);
+    const activity = await getActivityById(id);
 
     if (!activity) {
       return NextResponse.json(
@@ -47,16 +43,11 @@ export async function PATCH(
       };
 
       // Check if contact already exists
-      const existingContact = await db.query.contacts.findFirst({
-        where: (contacts, { eq }) => eq(contacts.email, contactData.email),
-      });
+      const existingContact = await getContactByEmail(contactData.email);
 
       if (existingContact) {
         // Contact already exists, just mark activity as accepted
-        await db
-          .update(activities)
-          .set({ status: 'accepted', processedAt: new Date() })
-          .where(eq(activities.id, id));
+        await markActivityStatus(id, 'accepted');
 
         return NextResponse.json({
           success: true,
@@ -67,12 +58,7 @@ export async function PATCH(
       }
 
       // Insert new contact
-      const [newContact] = await db
-        .insert(contacts)
-        .values(contactData)
-        .returning();
-
-      insertedRecord = newContact;
+      insertedRecord = await createContact(contactData);
     }
     // Handle task activity
     else if (activity.entityType === 'task') {
@@ -87,29 +73,21 @@ export async function PATCH(
       };
 
       // Insert new task
-      const [newTask] = await db
-        .insert(tasks)
-        .values({
-          title: taskData.title,
-          description: taskData.description || undefined,
-          companyName: taskData.companyName,
-          contactEmails: taskData.contactEmails,
-          status: taskData.status || 'todo',
-          priority: taskData.priority || 'medium',
-          dueDate: taskData.dueDate
-            ? new Date(taskData.dueDate)
-            : undefined,
-        })
-        .returning();
-
-      insertedRecord = newTask;
+      insertedRecord = await createTask({
+        title: taskData.title,
+        description: taskData.description || undefined,
+        companyName: taskData.companyName,
+        contactEmails: taskData.contactEmails,
+        status: taskData.status || 'todo',
+        priority: taskData.priority || 'medium',
+        dueDate: taskData.dueDate
+          ? new Date(taskData.dueDate)
+          : undefined,
+      });
     }
 
     // Mark activity as accepted
-    await db
-      .update(activities)
-      .set({ status: 'accepted', processedAt: new Date() })
-      .where(eq(activities.id, id));
+    await markActivityStatus(id, 'accepted');
 
     return NextResponse.json({
       success: true,

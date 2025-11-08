@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { tasks } from '@/db/schema';
-import { desc } from 'drizzle-orm';
+import { createTask, listTasks } from '@/services/taskService';
 
 /**
  * GET /api/tasks
@@ -9,10 +7,7 @@ import { desc } from 'drizzle-orm';
  */
 export async function GET() {
   try {
-    const allTasks = await db
-      .select()
-      .from(tasks)
-      .orderBy(desc(tasks.createdAt));
+    const allTasks = await listTasks();
 
     return NextResponse.json({
       success: true,
@@ -56,18 +51,15 @@ export async function POST(request: Request) {
     }
 
     // Insert new task
-    const [newTask] = await db
-      .insert(tasks)
-      .values({
-        title,
-        description: description || undefined,
-        companyName: companyName || undefined,
-        contactEmails: contactEmails || [],
-        status: status || 'todo',
-        priority: priority || 'medium',
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-      })
-      .returning();
+    const newTask = await createTask({
+      title,
+      description: description || undefined,
+      companyName: companyName || undefined,
+      contactEmails: contactEmails || [],
+      status: status || 'todo',
+      priority: priority || 'medium',
+      dueDate: dueDate ? new Date(dueDate) : undefined,
+    });
 
     return NextResponse.json({
       success: true,
@@ -84,4 +76,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

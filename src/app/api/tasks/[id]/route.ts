@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { tasks } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { deleteTask, getTaskById, updateTask } from '@/services/taskService';
 
 /**
  * GET /api/tasks/[id]
@@ -14,11 +12,7 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const [task] = await db
-      .select()
-      .from(tasks)
-      .where(eq(tasks.id, id))
-      .limit(1);
+    const task = await getTaskById(id);
 
     if (!task) {
       return NextResponse.json(
@@ -98,11 +92,7 @@ export async function PATCH(
     if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
     if (completedAt !== undefined) updateData.completedAt = completedAt ? new Date(completedAt) : null;
 
-    const [updatedTask] = await db
-      .update(tasks)
-      .set(updateData)
-      .where(eq(tasks.id, id))
-      .returning();
+    const updatedTask = await updateTask(id, updateData);
 
     if (!updatedTask) {
       return NextResponse.json(
@@ -138,10 +128,7 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const [deletedTask] = await db
-      .delete(tasks)
-      .where(eq(tasks.id, id))
-      .returning();
+    const deletedTask = await deleteTask(id);
 
     if (!deletedTask) {
       return NextResponse.json(
@@ -165,4 +152,3 @@ export async function DELETE(
     );
   }
 }
-

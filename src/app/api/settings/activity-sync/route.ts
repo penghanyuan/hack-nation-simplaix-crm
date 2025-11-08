@@ -1,55 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { userSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { NextResponse } from 'next/server';
+import { getUserSettings, updateLastActivitySync } from '@/services/userSettings';
 
 /**
  * POST /api/settings/activity-sync
  * Update the lastActivitySync timestamp
  */
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const userId = 'default'; // Using default user for now
 
-    // Check if user settings exist
-    const [existingSettings] = await db
-      .select()
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
-      .limit(1);
-
     const now = new Date();
 
-    if (existingSettings) {
-      // Update existing settings
-      const [updated] = await db
-        .update(userSettings)
-        .set({
-          lastActivitySync: now,
-          updatedAt: now,
-        })
-        .where(eq(userSettings.userId, userId))
-        .returning();
+    const updated = await updateLastActivitySync(userId, now);
 
-      return NextResponse.json({
-        success: true,
-        lastActivitySync: updated.lastActivitySync,
-      });
-    } else {
-      // Create new settings record
-      const [created] = await db
-        .insert(userSettings)
-        .values({
-          userId,
-          lastActivitySync: now,
-        })
-        .returning();
-
-      return NextResponse.json({
-        success: true,
-        lastActivitySync: created.lastActivitySync,
-      });
-    }
+    return NextResponse.json({
+      success: true,
+      lastActivitySync: updated?.lastActivitySync ?? now,
+    });
   } catch (error) {
     console.error('Error updating activity sync time:', error);
 
@@ -71,11 +38,7 @@ export async function GET() {
   try {
     const userId = 'default'; // Using default user for now
 
-    const [settings] = await db
-      .select()
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
-      .limit(1);
+    const settings = await getUserSettings(userId);
 
     return NextResponse.json({
       lastActivitySync: settings?.lastActivitySync || null,

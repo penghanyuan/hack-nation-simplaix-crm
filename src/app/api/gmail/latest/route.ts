@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
-import { userSettings } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 import { createOAuth2Client } from '@/lib/gmail';
 import { google } from 'googleapis';
+import { getUserSettings } from '@/services/userSettings';
+
+type GmailMessagePart = {
+  mimeType?: string | null;
+  body?: { data?: string | null } | null;
+  parts?: GmailMessagePart[];
+};
 
 /**
  * GET /api/gmail/latest
@@ -14,21 +18,15 @@ export async function GET() {
     const userId = 'default'; // For hackathon MVP, using single user
     
     // Get Gmail tokens from database
-    const settings = await db
-      .select()
-      .from(userSettings)
-      .where(eq(userSettings.userId, userId))
-      .limit(1);
+    const setting = await getUserSettings(userId);
 
-    if (settings.length === 0 || !settings[0].gmailAccessToken) {
+    if (!setting || !setting.gmailAccessToken) {
       return NextResponse.json(
         { error: 'Gmail not connected. Please connect your Gmail account first.' },
         { status: 401 }
       );
     }
 
-    const setting = settings[0];
-    
     // Check if token is expired
     const now = new Date();
     if (setting.gmailTokenExpiry && setting.gmailTokenExpiry < now) {
@@ -83,7 +81,7 @@ export async function GET() {
 
     // Extract body
     let body = '';
-    const payload = fullMessage.data.payload;
+    const payload = fullMessage.data.payload as GmailMessagePart | undefined;
     
     function decodeBody(encodedBody?: string): string {
       if (!encodedBody) return '';
@@ -94,7 +92,7 @@ export async function GET() {
       }
     }
 
-    function extractTextFromParts(parts: any[]): string {
+    function extractTextFromParts(parts: GmailMessagePart[] = []): string {
       let text = '';
       for (const part of parts) {
         if (part.mimeType === 'text/plain' && part.body?.data) {
@@ -153,4 +151,3 @@ export async function GET() {
     );
   }
 }
-

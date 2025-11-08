@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server"
-import { db } from "@/db"
-import { contacts } from "@/db/schema"
-import { desc } from "drizzle-orm"
+import { listContacts } from "@/services/contactService"
 
 export async function GET() {
   try {
-    const allContacts = await db
-      .select()
-      .from(contacts)
-      .orderBy(desc(contacts.createdAt))
+    const allContacts = await listContacts()
 
     return NextResponse.json(allContacts)
   } catch (error) {
@@ -19,4 +14,3 @@ export async function GET() {
     )
   }
 }
-

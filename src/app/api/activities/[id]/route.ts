@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { activities } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { getActivityById } from '@/services/activityService';
 
 /**
  * GET /api/activities/[id]
@@ -14,11 +12,7 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const [activity] = await db
-      .select()
-      .from(activities)
-      .where(eq(activities.id, id))
-      .limit(1);
+    const activity = await getActivityById(id);
 
     if (!activity) {
       return NextResponse.json(

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeEmail, type EmailData } from '@/lib/ai';
-import { db } from '@/db';
-import { contacts, tasks, activities } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { createPendingActivity, markActivityStatus } from '@/services/activityService';
+import { createContact, getContactByEmail } from '@/services/contactService';
+import { createTask } from '@/services/taskService';
 
 /**
  * POST /api/ai/analyze-email
@@ -42,34 +42,26 @@ export async function POST(request: NextRequest) {
 
     // Create activity for each extracted contact
     for (const contactData of analysis.contacts) {
-      const [activity] = await db
-        .insert(activities)
-        .values({
-          entityType: 'contact',
-          status: 'pending',
-          extractedData: contactData,
-          sourceEmailSubject: email.subject,
-          sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
-          sourceEmailDate: email.date ? new Date(email.date) : new Date(),
-        })
-        .returning();
+      const activity = await createPendingActivity({
+        entityType: 'contact',
+        extractedData: contactData,
+        sourceEmailSubject: email.subject,
+        sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
+        sourceEmailDate: email.date ? new Date(email.date) : new Date(),
+      });
 
       createdActivities.push(activity);
     }
 
     // Create activity for each extracted task
     for (const taskData of analysis.tasks) {
-      const [activity] = await db
-        .insert(activities)
-        .values({
-          entityType: 'task',
-          status: 'pending',
-          extractedData: taskData,
-          sourceEmailSubject: email.subject,
-          sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
-          sourceEmailDate: email.date ? new Date(email.date) : new Date(),
-        })
-        .returning();
+      const activity = await createPendingActivity({
+        entityType: 'task',
+        extractedData: taskData,
+        sourceEmailSubject: email.subject,
+        sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
+        sourceEmailDate: email.date ? new Date(email.date) : new Date(),
+      });
 
       createdActivities.push(activity);
     }
@@ -85,31 +77,20 @@ export async function POST(request: NextRequest) {
         const contactData = activity.extractedData as typeof analysis.contacts[0];
 
         // Check if contact already exists
-        const existingContact = await db.query.contacts.findFirst({
-          where: (contacts, { eq }) => eq(contacts.email, contactData.email),
-        });
+        const existingContact = await getContactByEmail(contactData.email);
 
         if (!existingContact) {
-          const [newContact] = await db
-            .insert(contacts)
-            .values(contactData)
-            .returning();
+          const newContact = await createContact(contactData);
 
           insertedContacts.push({ data: newContact, existed: false });
 
           // Mark activity as accepted
-          await db
-            .update(activities)
-            .set({ status: 'accepted', processedAt: new Date() })
-            .where(eq(activities.id, activity.id));
+          await markActivityStatus(activity.id, 'accepted');
         } else {
           insertedContacts.push({ data: existingContact, existed: true });
 
           // Mark activity as accepted (but contact existed)
-          await db
-            .update(activities)
-            .set({ status: 'accepted', processedAt: new Date() })
-            .where(eq(activities.id, activity.id));
+          await markActivityStatus(activity.id, 'accepted');
         }
       }
 
@@ -117,28 +98,22 @@ export async function POST(request: NextRequest) {
       for (const activity of createdActivities.filter(a => a.entityType === 'task')) {
         const taskData = activity.extractedData as typeof analysis.tasks[0];
 
-        const [newTask] = await db
-          .insert(tasks)
-          .values({
-            title: taskData.title,
-            description: taskData.description || undefined,
-            companyName: taskData.companyName,
-            contactEmails: taskData.contactEmails,
-            status: taskData.status || 'todo',
-            priority: taskData.priority || 'medium',
-            dueDate: taskData.dueDate
-              ? new Date(taskData.dueDate)
-              : undefined,
-          })
-          .returning();
+        const newTask = await createTask({
+          title: taskData.title,
+          description: taskData.description || undefined,
+          companyName: taskData.companyName,
+          contactEmails: taskData.contactEmails,
+          status: taskData.status || 'todo',
+          priority: taskData.priority || 'medium',
+          dueDate: taskData.dueDate
+            ? new Date(taskData.dueDate)
+            : undefined,
+        });
 
         insertedTasks.push(newTask);
 
         // Mark activity as accepted
-        await db
-          .update(activities)
-          .set({ status: 'accepted', processedAt: new Date() })
-          .where(eq(activities.id, activity.id));
+        await markActivityStatus(activity.id, 'accepted');
       }
 
       insertedData = {
@@ -217,4 +192,3 @@ export async function GET() {
     },
   });
 }
-

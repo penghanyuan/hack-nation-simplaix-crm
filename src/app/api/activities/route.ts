@@ -1,82 +1,37 @@
 import { NextResponse } from "next/server"
 import type { Activity } from "@/lib/types"
-import { db } from "@/db"
-import { interactions, activities } from "@/db/schema"
-import { desc, eq } from "drizzle-orm"
+import { getPendingActivities } from "@/services/activityService"
+import { createInteraction } from "@/services/interactionService"
 
-// Mock data - replace with real database queries later
-const mockActivities: Activity[] = [
-  {
-    id: "1",
-    type: "email",
-    title: "New Contact from Email",
-    description: "John Smith replied to your outreach campaign",
-    timestamp: new Date(Date.now() - 5 * 60000)
-  },
-  {
-    id: "2",
-    type: "linkedin",
-    title: "Contact Update",
-    description: "Sarah Johnson changed positions to Senior Manager at TechCorp",
-    timestamp: new Date(Date.now() - 15 * 60000)
-  },
-  {
-    id: "3",
-    type: "zoom",
-    title: "Task Update from Meeting",
-    description: "Follow-up call scheduled with Michael Chen",
-    timestamp: new Date(Date.now() - 30 * 60000)
-  },
-  {
-    id: "4",
-    type: "calendar",
-    title: "Upcoming Meeting",
-    description: "Q4 Planning with Emily Rodriguez in 30 minutes",
-    timestamp: new Date(Date.now() - 45 * 60000)
-  },
-  {
-    id: "5",
-    type: "slack",
-    title: "New Message",
-    description: "David Lee mentioned you in #sales-team",
-    timestamp: new Date(Date.now() - 60 * 60000)
-  },
-  {
-    id: "6",
-    type: "email",
-    title: "New Lead Generated",
-    description: "Alex Martinez filled out the contact form",
-    timestamp: new Date(Date.now() - 90 * 60000)
-  },
-  {
-    id: "7",
-    type: "linkedin",
-    title: "Connection Request",
-    description: "Jennifer Wilson wants to connect",
-    timestamp: new Date(Date.now() - 120 * 60000)
-  }
-]
+type ContactExtraction = {
+  name?: string
+  email?: string
+  companyName?: string
+  title?: string
+}
+
+type TaskExtraction = {
+  title?: string
+  companyName?: string
+  status?: string
+  priority?: string
+  dueDate?: string
+}
 
 export async function GET() {
   try {
     // Fetch pending activities from database
-    const dbActivities = await db
-      .select()
-      .from(activities)
-      .where(eq(activities.status, 'pending'))
-      .orderBy(desc(activities.createdAt))
-      .limit(20)
+    const dbActivities = await getPendingActivities(20)
 
     // Transform database activities to frontend Activity format
     const transformedActivities: Activity[] = dbActivities.map((activity) => {
-      const extractedData = activity.extractedData as any
-
       let title = ''
       let description = ''
 
       if (activity.entityType === 'contact') {
-        title = `${extractedData.name}`
-        description = extractedData.email
+        const extractedData = activity.extractedData as ContactExtraction
+        title = `${extractedData.name ?? ''}`
+        description = extractedData.email ?? ''
         if (extractedData.companyName) {
           description += ` • ${extractedData.companyName}`
         }
@@ -84,7 +39,8 @@ export async function GET() {
           description += ` • ${extractedData.title}`
         }
       } else if (activity.entityType === 'task') {
-        title = `${extractedData.title}`
+        const extractedData = activity.extractedData as TaskExtraction
+        title = `${extractedData.title ?? ''}`
         description = ''
         if (extractedData.companyName) {
           description += `${extractedData.companyName} • `
@@ -139,17 +95,14 @@ export async function POST(request: Request) {
     }
 
     // Insert into interactions table
-    const [newInteraction] = await db
-      .insert(interactions)
-      .values({
-        type: type as 'email' | 'meeting',
-        datetime: new Date(datetime),
-        participants: participants || [],
-        summary: summary || null,
-        sentiment: sentiment || null,
-        contactEmail: contactEmail || null,
-      })
-      .returning()
+    const newInteraction = await createInteraction({
+      type: type as 'email' | 'meeting',
+      datetime: new Date(datetime),
+      participants: participants || [],
+      summary: summary || null,
+      sentiment: sentiment || null,
+      contactEmail: contactEmail || null,
+    })
 
     return NextResponse.json({
       success: true,
@@ -166,4 +119,3 @@ export async function POST(request: Request) {
     )
   }
 }
-

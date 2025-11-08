@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/db"
-import { contacts } from "@/db/schema"
-import { eq } from "drizzle-orm"
+import { deleteContact, updateContact } from "@/services/contactService"
 
 export async function PATCH(
   request: NextRequest,
@@ -31,11 +29,7 @@ export async function PATCH(
     // Add updatedAt timestamp
     updateData.updatedAt = new Date()
 
-    const [updatedContact] = await db
-      .update(contacts)
-      .set(updateData)
-      .where(eq(contacts.id, id))
-      .returning()
+    const updatedContact = await updateContact(id, updateData)
 
     if (!updatedContact) {
       return NextResponse.json(
@@ -61,10 +55,7 @@ export async function DELETE(
   try {
     const { id } = params
 
-    const [deletedContact] = await db
-      .delete(contacts)
-      .where(eq(contacts.id, id))
-      .returning()
+    const deletedContact = await deleteContact(id)
 
     if (!deletedContact) {
       return NextResponse.json(
@@ -82,4 +73,3 @@ export async function DELETE(
     )
   }
 }
-

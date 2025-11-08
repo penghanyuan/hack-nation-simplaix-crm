@@ -72,12 +72,14 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-xs text-neutral-500">Integrations</SidebarGroupLabel>
-          <SidebarGroupContent className="px-2">
-            <GmailConnectButton />
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {state === "expanded" ? (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs text-neutral-500">Integrations</SidebarGroupLabel>
+            <SidebarGroupContent className="px-2">
+              <GmailConnectButton />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
     </Sidebar>
   )
