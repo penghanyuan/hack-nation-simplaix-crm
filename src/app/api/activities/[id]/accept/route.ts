@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { activities, contacts, deals } from '@/db/schema';
+import { activities, contacts, tasks } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -78,28 +78,27 @@ export async function PATCH(
     else if (activity.entityType === 'task') {
       const taskData = activity.extractedData as {
         title: string;
+        description?: string;
         companyName?: string;
         contactEmails: string[];
-        stage: 'new' | 'in_discussion' | 'proposal' | 'won' | 'lost';
-        amount?: number;
-        nextAction?: string;
-        nextActionDate?: string;
+        status: 'todo' | 'in_progress' | 'done';
+        priority: 'low' | 'medium' | 'high' | 'urgent';
+        dueDate?: string;
       };
 
-      // Insert new deal/task
+      // Insert new task
       const [newTask] = await db
-        .insert(deals)
+        .insert(tasks)
         .values({
           title: taskData.title,
+          description: taskData.description || undefined,
           companyName: taskData.companyName,
-          contactEmail: taskData.contactEmails[0] || null,
-          stage: taskData.stage,
-          amount: taskData.amount,
-          nextAction: taskData.nextAction,
-          nextActionDate: taskData.nextActionDate
-            ? new Date(taskData.nextActionDate)
+          contactEmails: taskData.contactEmails,
+          status: taskData.status || 'todo',
+          priority: taskData.priority || 'medium',
+          dueDate: taskData.dueDate
+            ? new Date(taskData.dueDate)
             : undefined,
-          lastActivityAt: new Date(),
         })
         .returning();
 

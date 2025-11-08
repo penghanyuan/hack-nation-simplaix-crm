@@ -27,16 +27,16 @@ const contactInfoSchema = z.object({
 });
 
 /**
- * Schema for task/deal information
+ * Schema for task information
  */
 const taskInfoSchema = z.object({
-  title: z.string().describe('Title or summary of the task/deal'),
+  title: z.string().describe('Title or summary of the task'),
+  description: z.string().nullable().describe('Detailed description of what needs to be done'),
   companyName: z.string().nullable().describe('Company name if mentioned'),
-  contactEmails: z.array(z.string().email()).describe('Array of contact emails related to this task/deal'),
-  stage: z.enum(['new', 'in_discussion', 'proposal', 'won', 'lost']).describe('Current stage of the deal'),
-  amount: z.number().nullable().describe('Deal amount in dollars if mentioned'),
-  nextAction: z.string().nullable().describe('Next action item or follow-up required'),
-  nextActionDate: z.string().nullable().describe('Date for next action in ISO 8601 format'),
+  contactEmails: z.array(z.string().email()).describe('Array of contact emails related to this task'),
+  status: z.enum(['todo', 'in_progress', 'done']).describe('Current status of the task (default: todo)'),
+  priority: z.enum(['low', 'medium', 'high', 'urgent']).describe('Priority level of the task (default: medium)'),
+  dueDate: z.string().nullable().describe('Due date for the task in ISO 8601 format'),
 });
 
 /**
@@ -44,7 +44,7 @@ const taskInfoSchema = z.object({
  */
 const emailAnalysisSchema = z.object({
   contacts: z.array(contactInfoSchema).describe('Array of contacts found in the email (can be empty if none found)').optional(),
-  tasks: z.array(taskInfoSchema).describe('Array of tasks/deals found in the email (can be empty if none found)').optional(),
+  tasks: z.array(taskInfoSchema).describe('Array of tasks found in the email (can be empty if none found)').optional(),
 });
 
 /**
@@ -59,12 +59,12 @@ export interface EmailAnalysisResult {
   }>;
   tasks: Array<{
     title: string;
+    description?: string;
     companyName?: string;
     contactEmails: string[];
-    stage: 'new' | 'in_discussion' | 'proposal' | 'won' | 'lost';
-    amount?: number;
-    nextAction?: string;
-    nextActionDate?: string;
+    status: 'todo' | 'in_progress' | 'done';
+    priority: 'low' | 'medium' | 'high' | 'urgent';
+    dueDate?: string;
   }>;
 }
 
@@ -83,13 +83,13 @@ export type TaskEntry = EmailAnalysisResult['tasks'][0];
  * ```typescript
  * const email = {
  *   subject: "Meeting Request with John",
- *   body: "Hi, I'm John Doe from Acme Corp. Let's schedule a $50k deal discussion...",
+ *   body: "Hi, I'm John Doe from Acme Corp. Let's schedule a product demo next week...",
  *   from: { email: "john@example.com", name: "John Doe" }
  * };
  * 
  * const result = await analyzeEmail(email);
  * // result.contacts = [{ name: "John Doe", email: "john@example.com", ... }]
- * // result.tasks = [{ title: "Schedule deal discussion", amount: 50000, ... }]
+ * // result.tasks = [{ title: "Schedule product demo", status: "todo", priority: "medium", ... }]
  * 
  * // Insert all contacts
  * for (const contact of result.contacts) {
@@ -98,7 +98,7 @@ export type TaskEntry = EmailAnalysisResult['tasks'][0];
  * 
  * // Insert all tasks
  * for (const task of result.tasks) {
- *   await db.insert(deals).values(task);
+ *   await db.insert(tasks).values(task);
  * }
  * ```
  */
@@ -132,16 +132,16 @@ STEP 1: Extract ALL contact information
 - Always try to extract at least the sender's information with their actual email address from the From: field
 - For people mentioned in email signatures, extract their contact info including email if provided
 
-STEP 2: Extract ALL task/deal information
-- Look for any business opportunities, action items, meetings, proposals, or follow-ups
-- For each task/deal, extract:
-  * title: Summary of the task/deal
-  * companyName: Related company name
+STEP 2: Extract ALL task information
+- Look for any action items, to-dos, meetings, follow-ups, or things that need to be done
+- For each task, extract:
+  * title: Brief summary of the task (what needs to be done)
+  * description: Detailed description of what needs to be done
+  * companyName: Related company name if mentioned
   * contactEmails: Array of email addresses of people involved in this task
-  * stage: 'new' (default), 'in_discussion', 'proposal', 'won', or 'lost'
-  * amount: Dollar amount if mentioned as a number
-  * nextAction: What needs to be done next
-  * nextActionDate: When it needs to be done (ISO 8601 format)
+  * status: 'todo' (default), 'in_progress', or 'done'
+  * priority: 'low', 'medium' (default), 'high', or 'urgent'
+  * dueDate: When the task should be completed (ISO 8601 format)
 - Return an array of tasks (can be empty [] if no tasks found)
 
 Important Guidelines:
@@ -149,15 +149,15 @@ Important Guidelines:
 - If no contacts found, return empty array for contacts (not null)
 - If no tasks found, return empty array for tasks (not null)
 - Extract dates in ISO 8601 format (e.g., "2024-01-15T14:00:00Z")
-- For amounts, only extract if clearly stated as a number (e.g., "$50,000" → 50000)
-- Default stage for tasks is 'new' unless context suggests otherwise
+- Default status for tasks is 'todo' unless context suggests otherwise
+- Default priority is 'medium' unless urgency is explicitly stated
 - If only partial information is available, still extract what you can
 - Do not throw errors or fail - always return a valid response with empty arrays if needed
 
 Examples:
 - Simple greeting email → { contacts: [sender info], tasks: [] }
-- Meeting request → { contacts: [sender info], tasks: [meeting task] }
-- Multi-person deal email → { contacts: [person1, person2, ...], tasks: [deal info] }
+- Meeting request → { contacts: [sender info], tasks: [meeting task with due date] }
+- Follow-up email → { contacts: [sender info], tasks: [follow-up task] }
 - Email with signature → extract contact info from signature (name, title, company, email if provided)
 - Spam/irrelevant → { contacts: [], tasks: [] }
 
@@ -177,7 +177,7 @@ ${emailData.body}
 
 Return a JSON object with two arrays:
 - contacts: array of all contacts found
-- tasks: array of all tasks/deals found
+- tasks: array of all tasks found
 
 If nothing is found in a category, return an empty array for that category.`;
 
@@ -217,12 +217,12 @@ If nothing is found in a category, return an empty array for that category.`;
       contacts: validContacts,
       tasks: rawResult.tasks?.map(task => ({
         title: task.title,
+        description: task.description || undefined,
         companyName: task.companyName || undefined,
         contactEmails: task.contactEmails.filter(email => email && email.includes('@')), // Filter valid emails only
-        stage: task.stage,
-        amount: task.amount || undefined,
-        nextAction: task.nextAction || undefined,
-        nextActionDate: task.nextActionDate || undefined,
+        status: task.status,
+        priority: task.priority,
+        dueDate: task.dueDate || undefined,
       })) || [],
     };
 

@@ -9,6 +9,19 @@ export const dealStageEnum = pgEnum('deal_stage', [
   'lost'
 ]);
 
+export const taskStatusEnum = pgEnum('task_status', [
+  'todo',
+  'in_progress',
+  'done'
+]);
+
+export const taskPriorityEnum = pgEnum('task_priority', [
+  'low',
+  'medium',
+  'high',
+  'urgent'
+]);
+
 export const interactionTypeEnum = pgEnum('interaction_type', [
   'email',
   'meeting'
@@ -86,6 +99,20 @@ export const deals = pgTable('deals', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const tasks = pgTable('tasks', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  title: text('title').notNull(),
+  description: text('description'),
+  companyName: text('company_name'),
+  contactEmails: jsonb('contact_emails').$type<string[]>(),
+  status: taskStatusEnum('status').default('todo').notNull(),
+  priority: taskPriorityEnum('priority').default('medium'),
+  dueDate: timestamp('due_date'),
+  completedAt: timestamp('completed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const interactions = pgTable('interactions', {
   id: uuid('id').defaultRandom().primaryKey(),
   type: interactionTypeEnum('type').notNull(),
@@ -142,6 +169,9 @@ export type NewCompany = typeof companies.$inferInsert;
 
 export type Deal = typeof deals.$inferSelect;
 export type NewDeal = typeof deals.$inferInsert;
+
+export type Task = typeof tasks.$inferSelect;
+export type NewTask = typeof tasks.$inferInsert;
 
 export type Interaction = typeof interactions.$inferSelect;
 export type NewInteraction = typeof interactions.$inferInsert;

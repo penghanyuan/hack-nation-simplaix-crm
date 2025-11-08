@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeEmail, type EmailData } from '@/lib/ai';
 import { db } from '@/db';
-import { contacts, deals, activities } from '@/db/schema';
+import { contacts, tasks, activities } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 /**
@@ -118,18 +118,17 @@ export async function POST(request: NextRequest) {
         const taskData = activity.extractedData as typeof analysis.tasks[0];
 
         const [newTask] = await db
-          .insert(deals)
+          .insert(tasks)
           .values({
             title: taskData.title,
+            description: taskData.description || undefined,
             companyName: taskData.companyName,
-            contactEmail: taskData.contactEmails[0] || null,
-            stage: taskData.stage as any,
-            amount: taskData.amount,
-            nextAction: taskData.nextAction,
-            nextActionDate: taskData.nextActionDate
-              ? new Date(taskData.nextActionDate)
+            contactEmails: taskData.contactEmails,
+            status: taskData.status || 'todo',
+            priority: taskData.priority || 'medium',
+            dueDate: taskData.dueDate
+              ? new Date(taskData.dueDate)
               : undefined,
-            lastActivityAt: new Date(),
           })
           .returning();
 

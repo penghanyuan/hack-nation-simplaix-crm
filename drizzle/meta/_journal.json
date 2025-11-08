@@ -36,6 +36,13 @@
       "when": 1762642492374,
       "tag": "0004_safe_silverclaw",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1762644012359,
+      "tag": "0005_steep_green_goblin",
+      "breakpoints": true
     }
   ]
 }
