@@ -17,75 +17,88 @@ export interface EmailData {
 }
 
 /**
- * Schema for email analysis result
- * Using a single object schema with conditional fields based on type
+ * Schema for contact information
  */
-const emailAnalysisSchema = z.object({
-  type: z.enum(['contact', 'task']).describe('Whether this email is about a contact or a task/deal'),
-  // Contact fields (used when type === 'contact')
-  contactName: z.string().nullable().describe('Full name of the contact person (only for contact type)'),
-  contactEmail: z.string().email().nullable().describe('Email address of the contact (only for contact type)'),
+const contactInfoSchema = z.object({
+  name: z.string().describe('Full name of the contact person'),
+  email: z.string().describe('Email address of the contact - use empty string if not found'),
   companyName: z.string().nullable().describe('Company name if mentioned'),
-  title: z.string().nullable().describe('Job title or position if mentioned (only for contact type)'),
-  // Task/Deal fields (used when type === 'task')
-  taskTitle: z.string().nullable().describe('Title or summary of the task/deal (only for task type)'),
-  taskContactEmail: z.string().email().nullable().describe('Related contact email for the task (only for task type)'),
-  stage: z.enum(['new', 'in_discussion', 'proposal', 'won', 'lost']).nullable().describe('Current stage of the deal (only for task type)'),
-  amount: z.number().nullable().describe('Deal amount in dollars if mentioned (only for task type)'),
-  nextAction: z.string().nullable().describe('Next action item or follow-up required (only for task type)'),
-  nextActionDate: z.string().nullable().describe('Date for next action in ISO format (only for task type)'),
+  title: z.string().nullable().describe('Job title or position if mentioned'),
 });
 
-// Transform the flat schema result into the expected discriminated union format
-export type EmailAnalysisResult = 
-  | {
-      type: 'contact';
-      data: {
-        name: string;
-        email: string;
-        companyName?: string;
-        title?: string;
-      };
-    }
-  | {
-      type: 'task';
-      data: {
-        title: string;
-        companyName?: string;
-        contactEmail?: string;
-        stage: 'new' | 'in_discussion' | 'proposal' | 'won' | 'lost';
-        amount?: number;
-        nextAction?: string;
-        nextActionDate?: string;
-      };
-    };
-
-export type ContactEntry = Extract<EmailAnalysisResult, { type: 'contact' }>;
-export type TaskEntry = Extract<EmailAnalysisResult, { type: 'task' }>;
+/**
+ * Schema for task/deal information
+ */
+const taskInfoSchema = z.object({
+  title: z.string().describe('Title or summary of the task/deal'),
+  companyName: z.string().nullable().describe('Company name if mentioned'),
+  contactEmails: z.array(z.string().email()).describe('Array of contact emails related to this task/deal'),
+  stage: z.enum(['new', 'in_discussion', 'proposal', 'won', 'lost']).describe('Current stage of the deal'),
+  amount: z.number().nullable().describe('Deal amount in dollars if mentioned'),
+  nextAction: z.string().nullable().describe('Next action item or follow-up required'),
+  nextActionDate: z.string().nullable().describe('Date for next action in ISO 8601 format'),
+});
 
 /**
- * Analyzes email content and determines if it's a contact or task entry
- * Returns structured data ready for database insertion
+ * Multi-step analysis schema - extracts both contacts and tasks
+ */
+const emailAnalysisSchema = z.object({
+  contacts: z.array(contactInfoSchema).describe('Array of contacts found in the email (can be empty if none found)').optional(),
+  tasks: z.array(taskInfoSchema).describe('Array of tasks/deals found in the email (can be empty if none found)').optional(),
+});
+
+/**
+ * Result type for email analysis
+ */
+export interface EmailAnalysisResult {
+  contacts: Array<{
+    name: string;
+    email: string;
+    companyName?: string;
+    title?: string;
+  }>;
+  tasks: Array<{
+    title: string;
+    companyName?: string;
+    contactEmails: string[];
+    stage: 'new' | 'in_discussion' | 'proposal' | 'won' | 'lost';
+    amount?: number;
+    nextAction?: string;
+    nextActionDate?: string;
+  }>;
+}
+
+export type ContactEntry = EmailAnalysisResult['contacts'][0];
+export type TaskEntry = EmailAnalysisResult['tasks'][0];
+
+/**
+ * Multi-step agent that analyzes email content and extracts both contacts and tasks
+ * Returns all extracted information without throwing errors
  * 
  * @param emailData - The email data to analyze
  * @param apiKey - OpenAI API key (optional, uses OPENAI_API_KEY env var by default)
- * @returns Structured object containing either contact or task data
+ * @returns Object containing arrays of contacts and tasks found in the email
  * 
  * @example
  * ```typescript
  * const email = {
- *   subject: "Meeting Request",
- *   body: "Hi, I'd like to schedule a demo...",
+ *   subject: "Meeting Request with John",
+ *   body: "Hi, I'm John Doe from Acme Corp. Let's schedule a $50k deal discussion...",
  *   from: { email: "john@example.com", name: "John Doe" }
  * };
  * 
  * const result = await analyzeEmail(email);
- * if (result.type === 'contact') {
- *   // Insert into contacts table
- *   await db.insert(contacts).values(result.data);
- * } else {
- *   // Insert into deals table
- *   await db.insert(deals).values(result.data);
+ * // result.contacts = [{ name: "John Doe", email: "john@example.com", ... }]
+ * // result.tasks = [{ title: "Schedule deal discussion", amount: 50000, ... }]
+ * 
+ * // Insert all contacts
+ * for (const contact of result.contacts) {
+ *   await db.insert(contacts).values(contact);
+ * }
+ * 
+ * // Insert all tasks
+ * for (const task of result.tasks) {
+ *   await db.insert(deals).values(task);
  * }
  * ```
  */
@@ -103,55 +116,70 @@ export async function analyzeEmail(
     ? createOpenAI({ apiKey: options.apiKey })
     : openai;
 
-  const systemPrompt = `You are an AI assistant that analyzes emails to extract structured information for a CRM system.
+  const systemPrompt = `You are a multi-step AI agent that extracts structured information from emails for a CRM system.
 
-Your task is to:
-1. Analyze the email content (subject, body, sender information)
-2. Determine if this email is primarily about:
-   - A CONTACT: New person introduction, networking, contact information exchange
-   - A TASK/DEAL: Business opportunity, sales lead, project discussion, meeting request, action item
+Your task is performed in TWO STEPS:
 
-3. Set the "type" field to either "contact" or "task"
+STEP 1: Extract ALL contact information
+- Look for people mentioned in the email (sender, recipients, people mentioned in the body)
+- For each person, extract:
+  * name: Full name of the person
+  * email: Email address (use the sender's email from "From:" field, or recipient's email if available)
+           If the person is mentioned in the body but no email is found, use empty string ""
+  * companyName: Company name if mentioned
+  * title: Job title or position if mentioned
+- Return an array of contacts (can be empty [] if no contacts found)
+- Always try to extract at least the sender's information with their actual email address from the From: field
+- For people mentioned in email signatures, extract their contact info including email if provided
 
-4. Extract relevant information based on the type:
+STEP 2: Extract ALL task/deal information
+- Look for any business opportunities, action items, meetings, proposals, or follow-ups
+- For each task/deal, extract:
+  * title: Summary of the task/deal
+  * companyName: Related company name
+  * contactEmails: Array of email addresses of people involved in this task
+  * stage: 'new' (default), 'in_discussion', 'proposal', 'won', or 'lost'
+  * amount: Dollar amount if mentioned as a number
+  * nextAction: What needs to be done next
+  * nextActionDate: When it needs to be done (ISO 8601 format)
+- Return an array of tasks (can be empty [] if no tasks found)
 
-For CONTACT type (set type="contact"):
-- Fill contactName: person's full name
-- Fill contactEmail: person's email address
-- Fill companyName: company name if mentioned
-- Fill title: job title or position if mentioned
-- Set all task fields (taskTitle, taskContactEmail, stage, amount, nextAction, nextActionDate) to null
-
-For TASK type (set type="task"):
-- Fill taskTitle: title or summary of the task/deal
-- Fill taskContactEmail: related contact email if mentioned
-- Fill companyName: company name if mentioned
-- Fill stage: one of 'new', 'in_discussion', 'proposal', 'won', 'lost' (default 'new')
-- Fill amount: deal amount in dollars if mentioned
-- Fill nextAction: next action item or follow-up required
-- Fill nextActionDate: date for next action in ISO 8601 format
-- Set all contact fields (contactName, contactEmail, title) to null
-
-Guidelines:
-- If the email is about introducing a new person or exchanging contact info → type="contact"
-- If the email discusses business opportunities, meetings, proposals, or requires follow-up → type="task"
-- Default to type="task" if uncertain, as tasks can reference contacts
+Important Guidelines:
+- Extract BOTH contacts AND tasks from the same email if both exist
+- If no contacts found, return empty array for contacts (not null)
+- If no tasks found, return empty array for tasks (not null)
 - Extract dates in ISO 8601 format (e.g., "2024-01-15T14:00:00Z")
-- For deal stages: use 'new' for initial outreach, 'in_discussion' for ongoing conversations
-- Be conservative with amounts - only extract if clearly stated as a number
-- Set unused fields to null based on the type`;
+- For amounts, only extract if clearly stated as a number (e.g., "$50,000" → 50000)
+- Default stage for tasks is 'new' unless context suggests otherwise
+- If only partial information is available, still extract what you can
+- Do not throw errors or fail - always return a valid response with empty arrays if needed
 
-  const userPrompt = `Analyze this email and determine if it's a contact entry or a task/deal entry:
+Examples:
+- Simple greeting email → { contacts: [sender info], tasks: [] }
+- Meeting request → { contacts: [sender info], tasks: [meeting task] }
+- Multi-person deal email → { contacts: [person1, person2, ...], tasks: [deal info] }
+- Email with signature → extract contact info from signature (name, title, company, email if provided)
+- Spam/irrelevant → { contacts: [], tasks: [] }
+
+Important: When extracting contacts, prioritize real email addresses:
+- Sender's email from the "From:" header is always reliable
+- Email addresses in signatures may be formatted as text (e.g., "john@example.com" or "📧 john@example.com")
+- If a person is only mentioned by name without email, use empty string "" for their email field`;
+
+  const userPrompt = `Extract all contacts and tasks from this email:
 
 Subject: ${emailData.subject}
 From: ${emailData.from.name || 'Unknown'} <${emailData.from.email}>
-${emailData.to ? `To: ${emailData.to}` : ''}
 ${emailData.date ? `Date: ${emailData.date}` : ''}
 
 Body:
 ${emailData.body}
 
-Extract the appropriate information and return it as a structured object.`;
+Return a JSON object with two arrays:
+- contacts: array of all contacts found
+- tasks: array of all tasks/deals found
+
+If nothing is found in a category, return an empty array for that category.`;
 
   try {
     const result = await generateObject({
@@ -159,40 +187,59 @@ Extract the appropriate information and return it as a structured object.`;
       schema: emailAnalysisSchema,
       prompt: userPrompt,
       system: systemPrompt,
-      temperature: 0.3, // Lower temperature for more consistent extraction
     });
 
     const rawResult = result.object;
+    console.log('✅ Analysis complete:', {
+      contactsFound: rawResult.contacts?.length || 0,
+      tasksFound: rawResult.tasks?.length || 0,
+    });
 
-    // Transform the flat schema result into the discriminated union format
-    console.log('rawResult', rawResult)
-    if (rawResult.type === 'contact') {
-      return {
-        type: 'contact',
-        data: {
-          name: rawResult.contactName || '',
-          email: rawResult.contactEmail || '',
-          companyName: rawResult.companyName || undefined,
-          title: rawResult.title || undefined,
-        },
-      };
-    } else {
-      return {
-        type: 'task',
-        data: {
-          title: rawResult.taskTitle || '',
-          companyName: rawResult.companyName || undefined,
-          contactEmail: rawResult.taskContactEmail || undefined,
-          stage: rawResult.stage || 'new',
-          amount: rawResult.amount || undefined,
-          nextAction: rawResult.nextAction || undefined,
-          nextActionDate: rawResult.nextActionDate || undefined,
-        },
-      };
-    }
+    // Clean up the result - remove null values and convert to undefined
+    // Filter out contacts without valid email addresses (required for DB)
+    const validContacts = (rawResult.contacts || [])
+      .filter(contact => {
+        // Check if email is valid (not empty and contains @)
+        const isValidEmail = contact.email && contact.email.includes('@');
+        if (!isValidEmail) {
+          console.log(`⚠️ Skipping contact "${contact.name}" - no valid email found`);
+        }
+        return isValidEmail;
+      })
+      .map(contact => ({
+        name: contact.name,
+        email: contact.email,
+        companyName: contact.companyName || undefined,
+        title: contact.title || undefined,
+      }));
+
+    const cleanedResult: EmailAnalysisResult = {
+      contacts: validContacts,
+      tasks: rawResult.tasks?.map(task => ({
+        title: task.title,
+        companyName: task.companyName || undefined,
+        contactEmails: task.contactEmails.filter(email => email && email.includes('@')), // Filter valid emails only
+        stage: task.stage,
+        amount: task.amount || undefined,
+        nextAction: task.nextAction || undefined,
+        nextActionDate: task.nextActionDate || undefined,
+      })) || [],
+    };
+
+    console.log('🧹 Cleaned result:', cleanedResult);
+    console.log('📊 Final result:', {
+      validContacts: cleanedResult.contacts.length,
+      tasks: cleanedResult.tasks.length,
+    });
+
+    return cleanedResult;
   } catch (error) {
-    console.error('Error analyzing email:', error);
-    throw new Error(`Failed to analyze email: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    // Don't throw errors - return empty result instead
+    console.error('⚠️ Error analyzing email, returning empty result:', error);
+    return {
+      contacts: [],
+      tasks: [],
+    };
   }
 }
 

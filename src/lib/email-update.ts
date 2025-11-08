@@ -7,8 +7,21 @@ export interface EmailUpdateResult {
   success: boolean;
   message: string;
   analysis?: {
-    type: 'contact' | 'task';
-    data: any;
+    contacts: Array<{
+      name: string;
+      email: string;
+      companyName?: string;
+      title?: string;
+    }>;
+    tasks: Array<{
+      title: string;
+      companyName?: string;
+      contactEmails: string[];
+      stage: string;
+      amount?: number;
+      nextAction?: string;
+      nextActionDate?: string;
+    }>;
   };
   error?: string;
 }
@@ -114,11 +127,14 @@ export async function updateLatestEmail(
 
     console.log('✅ Email analysis complete:');
     console.log('📊 Analysis Result:', JSON.stringify(analysisData.analysis, null, 2));
+    console.log(`👥 Contacts found: ${analysisData.analysis.contacts.length}`);
+    console.log(`📋 Tasks found: ${analysisData.analysis.tasks.length}`);
 
-    if (analysisData.analysis.type === 'contact') {
-      console.log('👤 Contact detected:', analysisData.analysis.data);
-    } else {
-      console.log('📋 Task/Deal detected:', analysisData.analysis.data);
+    if (analysisData.analysis.contacts.length > 0) {
+      console.log('👤 Contacts:', analysisData.analysis.contacts);
+    }
+    if (analysisData.analysis.tasks.length > 0) {
+      console.log('📋 Tasks:', analysisData.analysis.tasks);
     }
 
     callbacks?.onAnalyze?.(analysisData.analysis);
@@ -175,7 +191,25 @@ export function formatAnalysisMessage(result: EmailUpdateResult): string {
     return `ℹ️ ${result.message}`;
   }
 
-  const typeLabel = result.analysis.type === 'contact' ? 'Contact' : 'Task/Deal';
-  return `✅ Email analyzed successfully!\n\nType: ${typeLabel}\n\nCheck console for full details.`;
+  const contactCount = result.analysis.contacts.length;
+  const taskCount = result.analysis.tasks.length;
+
+  if (contactCount === 0 && taskCount === 0) {
+    return `ℹ️ No contacts or tasks found in the email.`;
+  }
+
+  const parts = ['✅ Email analyzed successfully!'];
+  
+  if (contactCount > 0) {
+    parts.push(`\n👥 ${contactCount} contact${contactCount > 1 ? 's' : ''} found`);
+  }
+  
+  if (taskCount > 0) {
+    parts.push(`\n📋 ${taskCount} task${taskCount > 1 ? 's' : ''} found`);
+  }
+
+  parts.push('\n\nCheck console for full details.');
+  
+  return parts.join('');
 }
 

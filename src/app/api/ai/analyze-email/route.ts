@@ -33,43 +33,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Analyze the email
-    const analysis = await analyzeEmail(email as EmailData);
+    // Analyze the email (multi-step agent extracts both contacts and tasks)
+    const analysis = await analyzeEmail(email as EmailData, { model: 'gpt-5-mini-2025-08-07' });
 
     // If autoInsert is true, insert into database
     let insertedData = null;
     if (autoInsert) {
-      if (analysis.type === 'contact') {
+      const insertedContacts = [];
+      const insertedTasks = [];
+
+      // Insert all extracted contacts
+      for (const contactData of analysis.contacts) {
         // Check if contact already exists
         const existingContact = await db.query.contacts.findFirst({
-          where: (contacts, { eq }) => eq(contacts.email, analysis.data.email),
+          where: (contacts, { eq }) => eq(contacts.email, contactData.email),
         });
 
         if (!existingContact) {
           const [newContact] = await db
             .insert(contacts)
-            .values(analysis.data)
+            .values(contactData)
             .returning();
           
-          insertedData = { type: 'contact', data: newContact };
+          insertedContacts.push({ data: newContact, existed: false });
         } else {
-          insertedData = { type: 'contact', data: existingContact, existed: true };
+          insertedContacts.push({ data: existingContact, existed: true });
         }
-      } else {
-        // Insert task/deal
-        const [newDeal] = await db
+      }
+
+      // Insert all extracted tasks
+      for (const taskData of analysis.tasks) {
+        // Note: deals table has contactEmail (singular), so we take the first email from the array
+        const [newTask] = await db
           .insert(deals)
           .values({
-            ...analysis.data,
-            nextActionDate: analysis.data.nextActionDate 
-              ? new Date(analysis.data.nextActionDate) 
+            title: taskData.title,
+            companyName: taskData.companyName,
+            contactEmail: taskData.contactEmails[0] || null, // Take first contact email
+            stage: taskData.stage,
+            amount: taskData.amount,
+            nextAction: taskData.nextAction,
+            nextActionDate: taskData.nextActionDate 
+              ? new Date(taskData.nextActionDate) 
               : undefined,
             lastActivityAt: new Date(),
           })
           .returning();
         
-        insertedData = { type: 'task', data: newDeal };
+        insertedTasks.push(newTask);
       }
+
+      insertedData = {
+        contacts: insertedContacts,
+        tasks: insertedTasks,
+      };
     }
 
     return NextResponse.json({
