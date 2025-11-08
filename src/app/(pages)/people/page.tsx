@@ -1,13 +1,40 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PeopleTable } from "@/components/people-table"
+import { toast } from "sonner"
 import type { Contact } from "@/db/schema"
 
 export default function PeoplePage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    // Check for OAuth callback messages
+    const success = searchParams.get('success')
+    const error = searchParams.get('error')
+
+    if (success === 'gmail_connected') {
+      toast.success('Gmail connected successfully!', {
+        description: 'Your Gmail account has been linked to the CRM.',
+      })
+      // Clean up URL params
+      window.history.replaceState({}, '', '/people')
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        'no_code': 'No authorization code received',
+        'auth_failed': 'Failed to authenticate with Gmail',
+      }
+      toast.error('Gmail connection failed', {
+        description: errorMessages[error] || error,
+      })
+      // Clean up URL params
+      window.history.replaceState({}, '', '/people')
+    }
+  }, [searchParams])
 
   useEffect(() => {
     async function fetchContacts() {

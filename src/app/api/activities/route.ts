@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import type { Activity } from "@/lib/types"
+import { db } from "@/db"
+import { interactions } from "@/db/schema"
 
 // Mock data - replace with real database queries later
 const mockActivities: Activity[] = [
@@ -66,6 +68,52 @@ export async function GET() {
     console.error("Error fetching activities:", error)
     return NextResponse.json(
       { error: "Failed to fetch activities" },
+      { status: 500 }
+    )
+  }
+}
+
+/**
+ * POST /api/activities
+ * Create a new interaction/activity
+ */
+export async function POST(request: Request) {
+  try {
+    const body = await request.json()
+    const { type, datetime, participants, summary, sentiment, contactEmail } = body
+
+    // Validate required fields
+    if (!type || !datetime) {
+      return NextResponse.json(
+        { error: 'Missing required fields: type, datetime' },
+        { status: 400 }
+      )
+    }
+
+    // Insert into interactions table
+    const [newInteraction] = await db
+      .insert(interactions)
+      .values({
+        type: type as 'email' | 'meeting',
+        datetime: new Date(datetime),
+        participants: participants || [],
+        summary: summary || null,
+        sentiment: sentiment || null,
+        contactEmail: contactEmail || null,
+      })
+      .returning()
+
+    return NextResponse.json({
+      success: true,
+      interaction: newInteraction,
+    })
+  } catch (error) {
+    console.error('Error creating interaction:', error)
+    return NextResponse.json(
+      {
+        error: 'Failed to create interaction',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
   }

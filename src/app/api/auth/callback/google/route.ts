@@ -16,13 +16,13 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       return NextResponse.redirect(
-        new URL(`/settings?error=${encodeURIComponent(error)}`, request.url)
+        new URL(`/people?error=${encodeURIComponent(error)}`, request.url)
       );
     }
 
     if (!code) {
       return NextResponse.redirect(
-        new URL('/settings?error=no_code', request.url)
+        new URL('/people?error=no_code', request.url)
       );
     }
 
@@ -69,14 +69,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Redirect to settings page with success
+    // Redirect to people page with success
     return NextResponse.redirect(
-      new URL('/settings?success=gmail_connected', request.url)
+      new URL('/people?success=gmail_connected', request.url)
     );
   } catch (error) {
     console.error('Error in OAuth callback:', error);
     return NextResponse.redirect(
-      new URL('/settings?error=auth_failed', request.url)
+      new URL('/people?error=auth_failed', request.url)
     );
   }
 }

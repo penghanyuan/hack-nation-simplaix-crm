@@ -2,18 +2,20 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { Users, CheckSquare } from "lucide-react"
+import { Users, CheckSquare, TestTube2 } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { GmailConnectButton } from "@/components/gmail-connect-button"
 
 const navigation = [
   {
@@ -25,6 +27,11 @@ const navigation = [
     title: "Tasks",
     icon: CheckSquare,
     href: "/tasks",
+  },
+  {
+    title: "Test Email",
+    icon: TestTube2,
+    href: "/test-email",
   },
 ]
 
@@ -63,6 +70,12 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs text-neutral-500">Integrations</SidebarGroupLabel>
+          <SidebarGroupContent className="px-2">
+            <GmailConnectButton />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

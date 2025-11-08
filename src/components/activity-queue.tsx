@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { Activity, ActivityType } from "@/lib/types"
+import { RefreshCw } from "lucide-react"
+import { updateLatestEmail, formatAnalysisMessage } from "@/lib/email-update"
 
 const activityTypeConfig: Record<ActivityType, { bg: string; text: string }> = {
   email: { bg: "bg-sky-50", text: "text-sky-600" },
@@ -29,26 +32,48 @@ function formatTimestamp(date: Date): string {
 export function ActivityQueue() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null)
+
+  async function fetchActivities() {
+    try {
+      const response = await fetch("/api/activities")
+      if (!response.ok) throw new Error("Failed to fetch activities")
+      const data = await response.json()
+      // Convert timestamp strings back to Date objects
+      const activitiesWithDates = data.map((activity: Activity) => ({
+        ...activity,
+        timestamp: new Date(activity.timestamp)
+      }))
+      setActivities(activitiesWithDates)
+    } catch (error) {
+      console.error("Error fetching activities:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleUpdate() {
+    setIsUpdating(true)
+
+    try {
+      const result = await updateLatestEmail({
+        onComplete: async () => {
+          await fetchActivities()
+          setLastUpdateTime(new Date())
+        },
+      })
+
+      alert(formatAnalysisMessage(result))
+    } catch (error) {
+      console.error('Error during update:', error)
+      alert(`Failed to update: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
 
   useEffect(() => {
-    async function fetchActivities() {
-      try {
-        const response = await fetch("/api/activities")
-        if (!response.ok) throw new Error("Failed to fetch activities")
-        const data = await response.json()
-        // Convert timestamp strings back to Date objects
-        const activitiesWithDates = data.map((activity: Activity) => ({
-          ...activity,
-          timestamp: new Date(activity.timestamp)
-        }))
-        setActivities(activitiesWithDates)
-      } catch (error) {
-        console.error("Error fetching activities:", error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     fetchActivities()
   }, [])
 
@@ -56,12 +81,29 @@ export function ActivityQueue() {
     <div className="flex border-t border-neutral-200 bg-neutral-50 shadow-md shrink-0 w-full overflow-hidden">
       <div className="px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 w-full">
         <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
-          <h2 className="text-xs sm:text-sm font-semibold text-neutral-900">
-            Recent Activity
-          </h2>
-          <button className="text-[10px] sm:text-xs text-neutral-500 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-300 rounded-sm px-1.5 sm:px-2 py-0.5 sm:py-1 whitespace-nowrap shrink-0">
-            View All
-          </button>
+          <div className="flex flex-col gap-0.5">
+            <h2 className="text-xs sm:text-sm font-semibold text-neutral-900">
+              Recent Activity
+            </h2>
+            {lastUpdateTime && (
+              <p className="text-[10px] text-neutral-500">
+                Last updated: {formatTimestamp(lastUpdateTime)}
+              </p>
+            )}
+          </div>
+          <Button
+            onClick={handleUpdate}
+            disabled={isUpdating}
+            size="sm"
+            variant="outline"
+            className="text-[10px] sm:text-xs whitespace-nowrap shrink-0 h-7 sm:h-8"
+          >
+            <RefreshCw className={cn(
+              "w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1",
+              isUpdating && "animate-spin"
+            )} />
+            {isUpdating ? "Updating..." : "Update"}
+          </Button>
         </div>
         <ScrollArea className="w-full">
           <div className="flex gap-2 sm:gap-3 pb-2">

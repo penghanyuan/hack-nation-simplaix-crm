@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { CopilotKit } from "@copilotkit/react-core";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
 
@@ -20,7 +21,7 @@ export default function RootLayout({
         <CopilotKit runtimeUrl="/api/copilotkit">
           {children}
         </CopilotKit>
-        
+        <Toaster />
       </body>
     </html>
   );
