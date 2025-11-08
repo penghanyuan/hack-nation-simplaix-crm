@@ -89,9 +89,15 @@ export async function GET() {
         if (extractedData.companyName) {
           description += `${extractedData.companyName} • `
         }
-        description += `Stage: ${extractedData.stage}`
-        if (extractedData.amount) {
-          description += ` • $${extractedData.amount.toLocaleString()}`
+        if (extractedData.status) {
+          description += `Status: ${extractedData.status.replace('_', ' ')}`
+        }
+        if (extractedData.priority) {
+          description += ` • Priority: ${extractedData.priority}`
+        }
+        if (extractedData.dueDate) {
+          const dueDate = new Date(extractedData.dueDate)
+          description += ` • Due: ${dueDate.toLocaleDateString()}`
         }
       }
 

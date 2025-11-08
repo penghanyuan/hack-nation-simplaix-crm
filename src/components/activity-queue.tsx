@@ -198,14 +198,13 @@ function ActivityCard({
       // Invalidate activities cache
       await onActivityProcessed()
 
-      // Also invalidate the contacts or deals cache based on entity type
+      // Also invalidate the contacts or tasks cache based on entity type
       if (activity.entityType === 'contact') {
         await globalMutate('/api/contacts')
         console.log('✅ Contacts cache invalidated')
       } else if (activity.entityType === 'task') {
-        // Invalidate deals/tasks cache when the endpoint exists
-        // await globalMutate('/api/deals')
-        console.log('✅ Task accepted (no cache to invalidate yet)')
+        await globalMutate('/api/tasks')
+        console.log('✅ Tasks cache invalidated')
       }
     } catch (error) {
       console.error('Error accepting activity:', error)
@@ -473,40 +472,42 @@ function TaskDetails({ data }: { data: any }) {
           <span className="font-medium">Title:</span>
           <p className="text-neutral-600">{data.title}</p>
         </div>
+        {data.description && (
+          <div className="col-span-2">
+            <span className="font-medium">Description:</span>
+            <p className="text-neutral-600">{data.description}</p>
+          </div>
+        )}
         {data.companyName && (
           <div>
             <span className="font-medium">Company:</span>
             <p className="text-neutral-600">{data.companyName}</p>
           </div>
         )}
-        <div>
-          <span className="font-medium">Stage:</span>
-          <p className="text-neutral-600 capitalize">{data.stage?.replace('_', ' ')}</p>
-        </div>
-        {data.amount && (
+        {data.status && (
           <div>
-            <span className="font-medium">Amount:</span>
-            <p className="text-neutral-600">${data.amount.toLocaleString()}</p>
+            <span className="font-medium">Status:</span>
+            <p className="text-neutral-600 capitalize">{data.status.replace('_', ' ')}</p>
+          </div>
+        )}
+        {data.priority && (
+          <div>
+            <span className="font-medium">Priority:</span>
+            <p className="text-neutral-600 capitalize">{data.priority}</p>
+          </div>
+        )}
+        {data.dueDate && (
+          <div>
+            <span className="font-medium">Due Date:</span>
+            <p className="text-neutral-600">
+              {new Date(data.dueDate).toLocaleDateString()}
+            </p>
           </div>
         )}
         {data.contactEmails && data.contactEmails.length > 0 && (
           <div className="col-span-2">
             <span className="font-medium">Contact Emails:</span>
             <p className="text-neutral-600">{data.contactEmails.join(', ')}</p>
-          </div>
-        )}
-        {data.nextAction && (
-          <div className="col-span-2">
-            <span className="font-medium">Next Action:</span>
-            <p className="text-neutral-600">{data.nextAction}</p>
-          </div>
-        )}
-        {data.nextActionDate && (
-          <div>
-            <span className="font-medium">Next Action Date:</span>
-            <p className="text-neutral-600">
-              {new Date(data.nextActionDate).toLocaleDateString()}
-            </p>
           </div>
         )}
       </div>
