@@ -68,14 +68,14 @@ export default function CopilotKitPage() {
 
 function YourMainContent({ themeColor }: { themeColor: string }) {
   // 🪁 Shared State: https://docs.copilotkit.ai/pydantic-ai/shared-state
-  const { state, setState } = useCoAgent<AgentState>({
-    name: "my_agent",
-    initialState: {
-      proverbs: [
-        "CopilotKit may be new, but its the best thing since sliced bread.",
-      ],
-    },
-  })
+  // const { state, setState } = useCoAgent<AgentState>({
+  //   name: "my_agent",
+  //   initialState: {
+  //     proverbs: [
+  //       "CopilotKit may be new, but its the best thing since sliced bread.",
+  //     ],
+  //   },
+  // })
 
   //🪁 Generative UI: https://docs.copilotkit.ai/pydantic-ai/generative-ui
   useCopilotAction({
@@ -104,7 +104,7 @@ function YourMainContent({ themeColor }: { themeColor: string }) {
       style={{ backgroundColor: themeColor }}
       className="h-screen flex justify-center items-center flex-col transition-colors duration-300"
     >
-      <ProverbsCard state={state} setState={setState} />
+      {/* <ProverbsCard state={state} setState={setState} /> */}
     </div>
   );
 }
