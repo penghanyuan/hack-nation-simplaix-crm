@@ -43,6 +43,13 @@
       "when": 1762644012359,
       "tag": "0005_steep_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762647888997,
+      "tag": "0006_absurd_quasar",
+      "breakpoints": true
     }
   ]
 }

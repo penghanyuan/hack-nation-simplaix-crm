@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getActivityById, markActivityStatus } from '@/services/activityService';
-import { createContact, getContactByEmail } from '@/services/contactService';
+import { createContact, getContactByEmail, updateContact } from '@/services/contactService';
 import { createTask } from '@/services/taskService';
 
 /**
@@ -40,25 +40,56 @@ export async function PATCH(
         email: string;
         companyName?: string;
         title?: string;
+        phone?: string;
+        linkedin?: string;
+        x?: string;
+        action?: 'create' | 'update';
+        existingContactId?: string;
+        changes?: Array<{
+          field: string;
+          oldValue: string | null | undefined;
+          newValue: string | null | undefined;
+        }>;
       };
 
-      // Check if contact already exists
-      const existingContact = await getContactByEmail(contactData.email);
+      // Check if this is an update or create action
+      if (contactData.action === 'update' && contactData.existingContactId) {
+        // This is a contact update - update the existing contact
+        const { existingContactId, changes, action, ...updateFields } = contactData;
+        
+        insertedRecord = await updateContact(existingContactId, updateFields);
 
-      if (existingContact) {
-        // Contact already exists, just mark activity as accepted
         await markActivityStatus(id, 'accepted');
 
         return NextResponse.json({
           success: true,
-          message: 'Contact already exists',
-          existed: true,
-          record: existingContact,
+          message: 'Contact updated successfully',
+          action: 'updated',
+          record: insertedRecord,
+          changes: changes || [],
         });
-      }
+      } else {
+        // This is a new contact - create it
+        const { action, existingContactId, changes, ...newContactData } = contactData;
 
-      // Insert new contact
-      insertedRecord = await createContact(contactData);
+        // Check if contact already exists (double-check)
+        const existingContact = await getContactByEmail(newContactData.email);
+
+        if (existingContact) {
+          // Contact already exists, just mark activity as accepted
+          await markActivityStatus(id, 'accepted');
+
+          return NextResponse.json({
+            success: true,
+            message: 'Contact already exists',
+            action: 'already_exists',
+            record: existingContact,
+          });
+        }
+
+        // Insert new contact
+        insertedRecord = await createContact(newContactData);
+      }
     }
     // Handle task activity
     else if (activity.entityType === 'task') {
@@ -91,8 +122,8 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: `${activity.entityType} accepted and created`,
-      existed: false,
+      message: `${activity.entityType} accepted and ${(activity.extractedData as any)?.action === 'update' ? 'updated' : 'created'}`,
+      action: (activity.extractedData as any)?.action || 'create',
       record: insertedRecord,
     });
   } catch (error) {

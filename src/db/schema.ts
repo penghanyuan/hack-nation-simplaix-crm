@@ -61,6 +61,11 @@ export const activityEntityTypeEnum = pgEnum('activity_entity_type', [
   'task'
 ]);
 
+export const activityActionEnum = pgEnum('activity_action', [
+  'create',
+  'update'
+]);
+
 // Tables
 export const contacts = pgTable('contacts', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -150,6 +155,7 @@ export const userSettings = pgTable('user_settings', {
 export const activities = pgTable('activities', {
   id: uuid('id').defaultRandom().primaryKey(),
   entityType: activityEntityTypeEnum('entity_type').notNull(),
+  action: activityActionEnum('action').default('create'),
   status: activityStatusEnum('status').default('pending').notNull(),
   extractedData: jsonb('extracted_data').notNull(),
   sourceInteractionId: uuid('source_interaction_id').references(() => interactions.id),

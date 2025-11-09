@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeEmailWithTools, type EmailData } from '@/lib/ai';
 import { createPendingActivity, markActivityStatus } from '@/services/activityService';
-import { createContact, getContactByEmail } from '@/services/contactService';
+import { createContact, getContactByEmail, updateContact } from '@/services/contactService';
 import { createTask } from '@/services/taskService';
 
 /**
@@ -40,17 +40,34 @@ export async function POST(request: NextRequest) {
     // Save all extracted data as pending activities
     const createdActivities = [];
 
-    // Create activity for each extracted contact
+    // Create activity for each extracted contact (new contacts)
     for (const contactData of analysis.contacts) {
       const activity = await createPendingActivity({
         entityType: 'contact',
-        extractedData: contactData,
+        action: 'create',
+        extractedData: { ...contactData, action: 'create' },
         sourceEmailSubject: email.subject,
         sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
         sourceEmailDate: email.date ? new Date(email.date) : new Date(),
       });
 
       createdActivities.push(activity);
+    }
+
+    // Create activity for each contact update (existing contacts with changes)
+    if (analysis.contactUpdates) {
+      for (const updateData of analysis.contactUpdates) {
+        const activity = await createPendingActivity({
+          entityType: 'contact',
+          action: 'update',
+          extractedData: { ...updateData, action: 'update' },
+          sourceEmailSubject: email.subject,
+          sourceEmailFrom: `${email.from.name || ''} <${email.from.email}>`.trim(),
+          sourceEmailDate: email.date ? new Date(email.date) : new Date(),
+        });
+
+        createdActivities.push(activity);
+      }
     }
 
     // Create activity for each extracted task
@@ -70,27 +87,51 @@ export async function POST(request: NextRequest) {
     let insertedData = null;
     if (autoInsert) {
       const insertedContacts = [];
+      const updatedContacts = [];
       const insertedTasks = [];
 
       // Auto-accept contact activities
       for (const activity of createdActivities.filter(a => a.entityType === 'contact')) {
-        const contactData = activity.extractedData as typeof analysis.contacts[0];
+        const contactData = activity.extractedData as any;
 
-        // Check if contact already exists
-        const existingContact = await getContactByEmail(contactData.email);
+        // Check if this is an update or create action
+        if (contactData.action === 'update') {
+          // This is a contact update - update the existing contact
+          const { existingContactId, changes, action, ...updateFields } = contactData;
+          
+          // Update the contact in the database
+          const updatedContact = await updateContact(existingContactId, updateFields);
 
-        if (!existingContact) {
-          const newContact = await createContact(contactData);
+          if (updatedContact) {
+            updatedContacts.push({ 
+              data: updatedContact, 
+              action: 'updated',
+              changes: changes 
+            });
 
-          insertedContacts.push({ data: newContact, existed: false });
-
-          // Mark activity as accepted
-          await markActivityStatus(activity.id, 'accepted');
+            // Mark activity as accepted
+            await markActivityStatus(activity.id, 'accepted');
+          }
         } else {
-          insertedContacts.push({ data: existingContact, existed: true });
+          // This is a new contact - create it
+          const { action, ...newContactFields } = contactData;
+          
+          // Check if contact already exists (double check)
+          const existingContact = await getContactByEmail(newContactFields.email);
 
-          // Mark activity as accepted (but contact existed)
-          await markActivityStatus(activity.id, 'accepted');
+          if (!existingContact) {
+            const newContact = await createContact(newContactFields);
+
+            insertedContacts.push({ data: newContact, action: 'created' });
+
+            // Mark activity as accepted
+            await markActivityStatus(activity.id, 'accepted');
+          } else {
+            insertedContacts.push({ data: existingContact, action: 'already_exists' });
+
+            // Mark activity as accepted (but contact existed)
+            await markActivityStatus(activity.id, 'accepted');
+          }
         }
       }
 
@@ -118,6 +159,7 @@ export async function POST(request: NextRequest) {
 
       insertedData = {
         contacts: insertedContacts,
+        contactUpdates: updatedContacts,
         tasks: insertedTasks,
       };
     }

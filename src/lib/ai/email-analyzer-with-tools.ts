@@ -12,6 +12,28 @@ const contactInfoSchema = z.object({
   email: z.string().describe('Email address of the contact - use empty string if not found'),
   companyName: z.string().nullable().describe('Company name if mentioned'),
   title: z.string().nullable().describe('Job title or position if mentioned'),
+  phone: z.string().nullable().describe('Phone number if mentioned'),
+  linkedin: z.string().nullable().describe('LinkedIn URL if mentioned'),
+  x: z.string().nullable().describe('Twitter/X handle if mentioned'),
+});
+
+/**
+ * Schema for contact update information
+ */
+const contactUpdateSchema = z.object({
+  existingContactId: z.string().describe('ID of the existing contact from contactLookup tool'),
+  name: z.string().describe('Full name of the contact person'),
+  email: z.string().describe('Email address of the contact'),
+  companyName: z.string().nullable().describe('Updated company name if changed'),
+  title: z.string().nullable().describe('Updated job title if changed'),
+  phone: z.string().nullable().describe('Updated phone number if changed'),
+  linkedin: z.string().nullable().describe('Updated LinkedIn URL if changed'),
+  x: z.string().nullable().describe('Updated Twitter/X handle if changed'),
+  changes: z.array(z.object({
+    field: z.string(),
+    oldValue: z.string().nullable(),
+    newValue: z.string().nullable(),
+  })).describe('List of fields that changed'),
 });
 
 /**
@@ -28,10 +50,11 @@ const taskInfoSchema = z.object({
 });
 
 /**
- * Multi-step analysis schema - extracts both contacts and tasks
+ * Multi-step analysis schema - extracts contacts, contact updates, and tasks
  */
 const emailAnalysisSchema = z.object({
   contacts: z.array(contactInfoSchema).describe('Array of NEW contacts found in the email that do not already exist in the database'),
+  contactUpdates: z.array(contactUpdateSchema).describe('Array of EXISTING contacts with updated information (use data from contactLookup tool)').optional(),
   tasks: z.array(taskInfoSchema).describe('Array of tasks found in the email (can be empty if none found)').optional(),
 });
 
@@ -72,29 +95,41 @@ export async function analyzeEmailWithTools(
     ? createOpenAI({ apiKey: options.apiKey })
     : openai;
 
-  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts and tasks while avoiding duplicates.
+  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts, detects updates, and finds tasks.
 
 IMPORTANT: Before extracting any contact, you MUST use the contactLookup tool to check if they already exist in the database.
 
 WORKFLOW:
 1. Read the email and identify all potential contacts (sender, recipients, people mentioned)
-2. For EACH potential contact, call the contactLookup tool with their information:
-   - Search by email (most reliable if available)
-   - Also search by name, company, or title if email is not available
-3. ONLY extract contacts that are NOT FOUND in the database (contactLookup returns found: false)
+2. For EACH potential contact, call the contactLookup tool with ALL available information:
+   - Always include: email, name, companyName, title
+   - Also include if found: phone, linkedin, x (Twitter/X)
+3. Based on contactLookup response:
+   - If found: false → Add to "contacts" array (new contact)
+   - If found: true AND hasChanges: true → Add to "contactUpdates" array with the changes
+   - If found: true AND hasChanges: false → Skip (no changes needed)
 4. Extract all tasks from the email
-5. Return the final structured output with new contacts and all tasks
+5. Return the final structured output
 
-CONTACT EXTRACTION RULES:
-- Use contactLookup tool for EVERY potential contact before adding them to the results
-- If contactLookup finds the contact (found: true), DO NOT include them in the output
-- Only include contacts where contactLookup returns found: false
-- For each NEW contact, extract:
+CONTACT EXTRACTION RULES (NEW CONTACTS):
+- Use contactLookup tool for EVERY potential contact
+- Only include in "contacts" array if contactLookup returns found: false
+- Extract ALL available fields:
   * name: Full name
-  * email: Email address (use sender's email from From: field, or empty string "" if not found)
+  * email: Email address (must contain @)
   * companyName: Company name if mentioned (nullable)
   * title: Job title or position if mentioned (nullable)
-- Filter out contacts without valid email addresses (must contain @)
+  * phone: Phone number if mentioned (nullable)
+  * linkedin: LinkedIn URL if mentioned (nullable)
+  * x: Twitter/X handle if mentioned (nullable)
+
+CONTACT UPDATE RULES (EXISTING CONTACTS WITH CHANGES):
+- Include in "contactUpdates" array if contactLookup returns found: true AND hasChanges: true
+- Extract ALL fields that changed (from contactLookup response):
+  * existingContactId: Use the "id" from contactLookup result
+  * name, email, companyName, title, phone, linkedin, x: Include all fields
+  * changes: Copy the "changes" array from contactLookup result
+- This helps track what information has been updated
 
 TASK EXTRACTION RULES:
 - Extract ALL action items, meetings, follow-ups, or to-dos
@@ -108,10 +143,10 @@ TASK EXTRACTION RULES:
   * dueDate: ISO 8601 format if mentioned (nullable)
 
 IMPORTANT NOTES:
-- Always check existing contacts using the contactLookup tool - this is critical to avoid duplicates
-- Return empty arrays if no new contacts or no tasks are found
-- Be thorough - check each contact individually with the tool
-- The tool performs case-insensitive matching on all fields`;
+- ALWAYS call contactLookup with ALL available information (email, name, company, title, phone, linkedin, x)
+- The tool detects changes automatically - use its response to populate contactUpdates
+- Return empty arrays if no new contacts, no updates, or no tasks found
+- Be thorough - check each contact individually`;
 
   const userPrompt = `Analyze this email and extract NEW contacts (that don't exist in DB) and tasks:
 
@@ -150,6 +185,7 @@ Return a structured output with:
     const rawResult = result.experimental_output;
     console.log('✅ Analysis complete:', {
       contactsFound: rawResult.contacts?.length || 0,
+      contactUpdatesFound: rawResult.contactUpdates?.length || 0,
       tasksFound: rawResult.tasks?.length || 0,
       stepsUsed: result.steps.length,
     });
@@ -172,10 +208,28 @@ Return a structured output with:
         email: contact.email,
         companyName: contact.companyName || undefined,
         title: contact.title || undefined,
+        phone: contact.phone || undefined,
+        linkedin: contact.linkedin || undefined,
+        x: contact.x || undefined,
+      }));
+
+    // Process contact updates
+    const validContactUpdates = (rawResult.contactUpdates || [])
+      .map(update => ({
+        existingContactId: update.existingContactId,
+        name: update.name,
+        email: update.email,
+        companyName: update.companyName || undefined,
+        title: update.title || undefined,
+        phone: update.phone || undefined,
+        linkedin: update.linkedin || undefined,
+        x: update.x || undefined,
+        changes: update.changes,
       }));
 
     const cleanedResult: EmailAnalysisResult = {
       contacts: validContacts,
+      contactUpdates: validContactUpdates.length > 0 ? validContactUpdates : undefined,
       tasks: rawResult.tasks?.map(task => ({
         title: task.title,
         description: task.description || undefined,
@@ -189,6 +243,7 @@ Return a structured output with:
 
     console.log('🧹 Final result:', {
       newContacts: cleanedResult.contacts.length,
+      contactUpdates: cleanedResult.contactUpdates?.length || 0,
       tasks: cleanedResult.tasks.length,
     });
 

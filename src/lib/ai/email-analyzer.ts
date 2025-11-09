@@ -56,6 +56,24 @@ export interface EmailAnalysisResult {
     email: string;
     companyName?: string;
     title?: string;
+    phone?: string;
+    linkedin?: string;
+    x?: string;
+  }>;
+  contactUpdates?: Array<{
+    existingContactId: string;
+    name: string;
+    email: string;
+    companyName?: string;
+    title?: string;
+    phone?: string;
+    linkedin?: string;
+    x?: string;
+    changes: Array<{
+      field: string;
+      oldValue: string | null | undefined;
+      newValue: string | null | undefined;
+    }>;
   }>;
   tasks: Array<{
     title: string;

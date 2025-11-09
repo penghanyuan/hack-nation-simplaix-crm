@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import useSWR, { mutate as globalMutate } from "swr"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
@@ -70,6 +70,7 @@ export function ActivityQueue() {
     ...activity,
     timestamp: new Date(activity.timestamp)
   })) || []
+  
 
   async function handleUpdate() {
     setIsUpdating(true)
@@ -163,7 +164,18 @@ function ActivityCard({
 
   // Use entityType from activity object
   const entityType = activity.entityType
-
+  useEffect(() => {
+    const fetchActivityDetails = async () => {
+      const response = await fetch(`/api/activities/${activity.id}`)
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Activity details:', data)
+        setFullActivityData(data)
+      }
+    }
+    fetchActivityDetails()
+  }, [activity.id])
+  
   const handleCardClick = async () => {
     // Fetch full activity data
     try {
@@ -273,6 +285,19 @@ function ActivityCard({
                 {entityType}
               </Badge>
             )}
+            {/* Action Badge (Create/Update) */}
+            {entityType === 'contact' && fullActivityData && (
+              <Badge
+                className={cn(
+                  "border-transparent text-[10px] sm:text-xs font-medium px-2 sm:px-2.5 py-0.5",
+                  fullActivityData.action === 'update'
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-green-100 text-green-700"
+                )}
+              >
+                {fullActivityData.action === 'update' ? 'Update' : 'Create'}
+              </Badge>
+            )}
             {/* Source Type Badge */}
             <Badge
               className={cn(
@@ -334,7 +359,7 @@ function ActivityCard({
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
               {entityType && (
                 <Badge
                   className={cn(
@@ -347,7 +372,20 @@ function ActivityCard({
                   {entityType}
                 </Badge>
               )}
-              {activity.title}
+              {/* Action Badge in Modal */}
+              {entityType === 'contact' && fullActivityData && (
+                <Badge
+                  className={cn(
+                    "text-xs",
+                    fullActivityData.action === 'update'
+                      ? "bg-amber-100 text-amber-700"
+                      : "bg-green-100 text-green-700"
+                  )}
+                >
+                  {fullActivityData.action === 'update' ? 'Update' : 'Create'}
+                </Badge>
+              )}
+              <span>{activity.title}</span>
             </DialogTitle>
             <DialogDescription>
               {fullActivityData?.sourceEmailSubject && (
@@ -385,10 +423,19 @@ function ActivityCard({
                 handleAccept(e)
               }}
               disabled={isProcessing}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+              className={cn(
+                "flex-1 text-white",
+                fullActivityData?.action === 'update'
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-green-600 hover:bg-green-700"
+              )}
             >
               <Check className="w-4 h-4 mr-2" />
-              Accept & Close
+              {entityType === 'contact' && fullActivityData?.action === 'update' 
+                ? 'Update Contact' 
+                : entityType === 'contact'
+                ? 'Create Contact'
+                : 'Accept & Close'}
             </Button>
             <Button
               variant="outline"
@@ -411,8 +458,38 @@ function ActivityCard({
 
 // Helper component to display contact details
 function ContactDetails({ data }: { data: any }) {
+  const isUpdate = data.action === 'update';
+  const hasChanges = isUpdate && data.changes && data.changes.length > 0;
+
   return (
-    <div className="space-y-2 text-sm">
+    <div className="space-y-4 text-sm">
+      {/* Show changes summary for updates */}
+      {hasChanges && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <h5 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
+            <span className="text-lg">📝</span>
+            Changes Detected ({data.changes.length})
+          </h5>
+          <div className="space-y-2">
+            {data.changes.map((change: any, idx: number) => (
+              <div key={idx} className="text-xs bg-white p-2 rounded border border-amber-100">
+                <span className="font-medium capitalize">{change.field}:</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-neutral-500 line-through">
+                    {change.oldValue || '(empty)'}
+                  </span>
+                  <span className="text-neutral-400">→</span>
+                  <span className="text-amber-700 font-medium">
+                    {change.newValue || '(empty)'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Contact information */}
       <div className="grid grid-cols-2 gap-2">
         <div>
           <span className="font-medium">Name:</span>
@@ -440,12 +517,6 @@ function ContactDetails({ data }: { data: any }) {
             <p className="text-neutral-600">{data.phone}</p>
           </div>
         )}
-        {data.city && (
-          <div>
-            <span className="font-medium">City:</span>
-            <p className="text-neutral-600">{data.city}</p>
-          </div>
-        )}
         {data.linkedin && (
           <div>
             <span className="font-medium">LinkedIn:</span>
@@ -454,8 +525,14 @@ function ContactDetails({ data }: { data: any }) {
         )}
         {data.x && (
           <div>
-            <span className="font-medium">X (Twitter):</span>
+            <span className="font-medium">Twitter/X:</span>
             <p className="text-neutral-600">{data.x}</p>
+          </div>
+        )}
+        {data.city && (
+          <div>
+            <span className="font-medium">City:</span>
+            <p className="text-neutral-600">{data.city}</p>
           </div>
         )}
       </div>
