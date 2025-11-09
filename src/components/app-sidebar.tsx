@@ -16,6 +16,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { GmailConnectButton } from "@/components/gmail-connect-button"
+import { EmailSyncHoursSelector } from "@/components/email-sync-hours-selector"
 
 const navigation = [
   {
@@ -77,6 +78,14 @@ export function AppSidebar() {
             <SidebarGroupLabel className="text-xs text-neutral-500">Integrations</SidebarGroupLabel>
             <SidebarGroupContent className="px-2 space-y-2">
               <GmailConnectButton />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
+        {state === "expanded" ? (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs text-neutral-500">Settings</SidebarGroupLabel>
+            <SidebarGroupContent className="px-2 space-y-2">
+              <EmailSyncHoursSelector />
             </SidebarGroupContent>
           </SidebarGroup>
         ) : null}

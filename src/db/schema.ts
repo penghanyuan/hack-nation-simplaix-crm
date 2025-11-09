@@ -79,6 +79,13 @@ export const transcriptStatusEnum = pgEnum('transcript_status', [
   'error'
 ]);
 
+export const emailStatusEnum = pgEnum('email_status', [
+  'pending',
+  'processing',
+  'processed',
+  'error'
+]);
+
 // Tables
 export const contacts = pgTable('contacts', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -161,6 +168,7 @@ export const userSettings = pgTable('user_settings', {
   autoApproveMode: boolean('auto_approve_mode').default(false).notNull(),
   lastGmailSync: timestamp('last_gmail_sync'),
   lastActivitySync: timestamp('last_activity_sync'),
+  emailSyncHours: integer('email_sync_hours').default(12).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -196,6 +204,22 @@ export const transcripts = pgTable('transcripts', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+export const emails = pgTable('emails', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  gmailId: text('gmail_id').notNull().unique(),
+  subject: text('subject').notNull(),
+  body: text('body').notNull(),
+  fromEmail: text('from_email').notNull(),
+  fromName: text('from_name'),
+  toEmail: text('to_email'),
+  receivedAt: timestamp('received_at').notNull(),
+  status: emailStatusEnum('status').default('pending').notNull(),
+  metadata: jsonb('metadata'),
+  processedAt: timestamp('processed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 // Types
 export type Contact = typeof contacts.$inferSelect;
 export type NewContact = typeof contacts.$inferInsert;
@@ -223,4 +247,7 @@ export type NewActivity = typeof activities.$inferInsert;
 
 export type Transcript = typeof transcripts.$inferSelect;
 export type NewTranscript = typeof transcripts.$inferInsert;
+
+export type Email = typeof emails.$inferSelect;
+export type NewEmail = typeof emails.$inferInsert;
 

@@ -122,12 +122,12 @@ export async function fetchRecentEmails(
   daysBack: number = 7
 ): Promise<GmailEmail[]> {
   const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-  
+
   // Calculate date for filtering (7 days back)
   const dateAfter = new Date();
   dateAfter.setDate(dateAfter.getDate() - daysBack);
   const afterQuery = `after:${Math.floor(dateAfter.getTime() / 1000)}`;
-  
+
   // Fetch message IDs (from inbox, sent, or important categories)
   const response = await gmail.users.messages.list({
     userId: 'me',
@@ -151,10 +151,78 @@ export async function fetchRecentEmails(
 
       const headers = fullMessage.data.payload?.headers || [];
       const parsed = parseHeaders(headers);
-      
+
       let body = '';
       const payload = fullMessage.data.payload;
-      
+
+      // Handle different email structures
+      if (payload?.body?.data) {
+        body = decodeBody(payload.body.data);
+      } else if (payload?.parts) {
+        body = extractTextFromParts(payload.parts);
+      }
+
+      emails.push({
+        id: message.id,
+        threadId: fullMessage.data.threadId || '',
+        from: parsed.from,
+        to: parsed.to,
+        cc: parsed.cc,
+        subject: parsed.subject,
+        body: body || fullMessage.data.snippet || '',
+        date: new Date(parsed.date),
+        snippet: fullMessage.data.snippet || '',
+      });
+    } catch (error) {
+      console.error(`Error fetching message ${message.id}:`, error);
+    }
+  }
+
+  return emails;
+}
+
+/**
+ * Fetch emails from Gmail by hours back
+ */
+export async function fetchEmailsByHours(
+  oauth2Client: OAuth2Client,
+  hoursBack: number = 12,
+  maxResults: number = 50
+): Promise<GmailEmail[]> {
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+  // Calculate date for filtering (N hours back)
+  const dateAfter = new Date();
+  dateAfter.setHours(dateAfter.getHours() - hoursBack);
+  const afterQuery = `after:${Math.floor(dateAfter.getTime() / 1000)}`;
+
+  // Fetch message IDs (from inbox, sent, or important categories)
+  const response = await gmail.users.messages.list({
+    userId: 'me',
+    maxResults,
+    q: `${afterQuery} (in:inbox OR in:sent) -in:spam -in:trash`,
+  });
+
+  const messages = response.data.messages || [];
+  const emails: GmailEmail[] = [];
+
+  // Fetch full message details for each ID
+  for (const message of messages) {
+    if (!message.id) continue;
+
+    try {
+      const fullMessage = await gmail.users.messages.get({
+        userId: 'me',
+        id: message.id,
+        format: 'full',
+      });
+
+      const headers = fullMessage.data.payload?.headers || [];
+      const parsed = parseHeaders(headers);
+
+      let body = '';
+      const payload = fullMessage.data.payload;
+
       // Handle different email structures
       if (payload?.body?.data) {
         body = decodeBody(payload.body.data);

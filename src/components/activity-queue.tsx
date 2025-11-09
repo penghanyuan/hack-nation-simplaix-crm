@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils"
 import type { Activity, ActivityType } from "@/lib/types"
 import type { Activity as DBActivity } from "@/db/schema"
 import { RefreshCw, Check, X } from "lucide-react"
-import { updateLatestEmail, formatAnalysisMessage } from "@/lib/email-update"
 import { toast } from "sonner"
 
 // Fetcher function for SWR
@@ -42,9 +41,10 @@ function formatTimestamp(date: Date): string {
 
 export function ActivityQueue() {
   const [isUpdating, setIsUpdating] = useState(false)
+  const [statusText, setStatusText] = useState<string>("")
 
   // Use SWR for data fetching
-  const { data: rawActivities, error, isLoading, mutate } = useSWR<Activity[]>(
+  const { data: rawActivities, isLoading, mutate } = useSWR<Activity[]>(
     '/api/activities',
     fetcher,
     {
@@ -73,6 +73,7 @@ export function ActivityQueue() {
 
   async function handleUpdate() {
     setIsUpdating(true)
+    setStatusText("Starting sync...")
 
     // Start polling more frequently during analysis
     const pollInterval = setInterval(() => {
@@ -80,17 +81,21 @@ export function ActivityQueue() {
     }, 3000)
 
     try {
-      // Step 1: Run email update and transcript sync in parallel
-      const [emailResult, transcriptSyncResult] = await Promise.allSettled([
-        // Email update
-        updateLatestEmail({
-          onComplete: async () => {
-            await mutate() // Revalidate activities cache
-
-            // Update lastActivitySync timestamp in database
-            await fetch('/api/settings/activity-sync', { method: 'POST' })
-            await mutateSyncTime() // Revalidate sync time cache
-          },
+      // Step 1: Sync emails and transcripts in parallel
+      setStatusText("Syncing emails and transcripts...")
+      const [emailSyncResult, transcriptSyncResult] = await Promise.allSettled([
+        // Email sync from Gmail
+        fetch('/api/emails/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        }).then(async (response) => {
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to sync emails')
+          }
+          const data = await response.json()
+          console.log('📧 Email sync complete:', data)
+          return data
         }),
         // Transcript sync (without analyzing)
         fetch('/api/transcripts/sync', {
@@ -109,13 +114,56 @@ export function ActivityQueue() {
       ])
 
       // Check sync results
-      const emailSuccess = emailResult.status === 'fulfilled'
+      const emailSyncSuccess = emailSyncResult.status === 'fulfilled'
       const transcriptSyncSuccess = transcriptSyncResult.status === 'fulfilled'
 
-      // Step 2: Analyze pending transcripts (after sync completes)
-      let transcriptAnalysisResult = null
-      if (transcriptSyncSuccess) {
+      const emailSyncData = emailSyncSuccess ? emailSyncResult.value : null
+      const transcriptSyncData = transcriptSyncSuccess ? transcriptSyncResult.value : null
+
+      const totalPendingEmails = emailSyncData?.results?.created || 0
+      const totalPendingTranscripts = transcriptSyncData?.results?.created || 0
+      const totalPending = totalPendingEmails + totalPendingTranscripts
+
+      if (totalPending > 0) {
+        setStatusText(`Found ${totalPendingEmails} emails and ${totalPendingTranscripts} transcripts to analyze`)
+      }
+
+      // Step 2: Analyze pending emails (after sync completes)
+      let emailAnalysisResult = null
+      if (emailSyncSuccess && totalPendingEmails > 0) {
         try {
+          setStatusText(`Analyzing emails and transcripts (0/${totalPending})...`)
+          console.log('🤖 Starting analysis of pending emails...')
+          const analyzeResponse = await fetch('/api/emails/analyze-pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+
+          if (analyzeResponse.ok) {
+            emailAnalysisResult = await analyzeResponse.json()
+            console.log('✅ Email analysis complete:', emailAnalysisResult)
+
+            const emailsProcessed = emailAnalysisResult.results?.processed || 0
+            setStatusText(`Analyzing emails and transcripts (${emailsProcessed}/${totalPending})...`)
+
+            // Revalidate activities cache to show new activities
+            await mutate()
+          } else {
+            const error = await analyzeResponse.json()
+            console.error('❌ Failed to analyze emails:', error)
+          }
+        } catch (error) {
+          console.error('❌ Error analyzing pending emails:', error)
+        }
+      }
+
+      // Step 3: Analyze pending transcripts (after sync completes)
+      let transcriptAnalysisResult = null
+      if (transcriptSyncSuccess && totalPendingTranscripts > 0) {
+        try {
+          const emailsProcessed = emailAnalysisResult?.results?.processed || 0
+          setStatusText(`Analyzing emails and transcripts (${emailsProcessed}/${totalPending})...`)
+
           console.log('🤖 Starting analysis of pending transcripts...')
           const analyzeResponse = await fetch('/api/transcripts/analyze-pending', {
             method: 'POST',
@@ -125,7 +173,10 @@ export function ActivityQueue() {
           if (analyzeResponse.ok) {
             transcriptAnalysisResult = await analyzeResponse.json()
             console.log('✅ Transcript analysis complete:', transcriptAnalysisResult)
-            
+
+            const totalProcessed = emailsProcessed + (transcriptAnalysisResult.results?.processed || 0)
+            setStatusText(`Analyzing emails and transcripts (${totalProcessed}/${totalPending})...`)
+
             // Revalidate activities cache to show new activities
             await mutate()
           } else {
@@ -137,42 +188,55 @@ export function ActivityQueue() {
         }
       }
 
+      // Update lastActivitySync timestamp
+      setStatusText("Finalizing...")
+      await fetch('/api/settings/activity-sync', { method: 'POST' })
+      await mutateSyncTime() // Revalidate sync time cache
+
       // Final revalidation after all operations
       await mutate()
 
       // Show appropriate toast based on results
-      if (emailSuccess && transcriptSyncSuccess && transcriptAnalysisResult) {
-        const syncData = transcriptSyncResult.value
-        const analysisData = transcriptAnalysisResult.results
+      const emailAnalysisData = emailAnalysisResult?.results
+      const transcriptAnalysisData = transcriptAnalysisResult?.results
+
+      let description = []
+
+      if (emailSyncSuccess && emailAnalysisData) {
+        description.push(
+          `Emails: ${emailSyncData.results.created} synced, ${emailAnalysisData.processed} analyzed, ${emailAnalysisData.activities} activities created`
+        )
+      } else if (emailSyncSuccess && emailSyncData) {
+        description.push(`Emails: ${emailSyncData.results.created} synced`)
+      }
+
+      if (transcriptSyncSuccess && transcriptAnalysisData) {
+        description.push(
+          `Transcripts: ${transcriptSyncData.results.created} synced, ${transcriptAnalysisData.processed} analyzed, ${transcriptAnalysisData.activities} activities created`
+        )
+      } else if (transcriptSyncSuccess && transcriptSyncData) {
+        description.push(`Transcripts: ${transcriptSyncData.results.created} synced`)
+      }
+
+      if (description.length > 0) {
+        setStatusText("Complete!")
         toast.success("Update complete", {
-          description: `Email analyzed. Transcripts: ${syncData.results.created} synced, ${analysisData.processed} analyzed, ${analysisData.activities} activities created.`,
+          description: description.join('. '),
           duration: 5000,
-        })
-      } else if (emailSuccess && transcriptSyncSuccess) {
-        const syncData = transcriptSyncResult.value
-        toast.success("Update complete", {
-          description: `Email analyzed. Transcripts: ${syncData.results.created} synced. No pending transcripts to analyze.`,
-          duration: 5000,
-        })
-      } else if (emailSuccess) {
-        toast.success("Email updated successfully", {
-          description: "Transcript sync failed",
-        })
-      } else if (transcriptSyncSuccess) {
-        const syncData = transcriptSyncResult.value
-        toast.success("Transcripts synced", {
-          description: `${syncData.results.created} synced. Email update failed.`,
         })
       } else {
-        throw new Error('Both email and transcript updates failed')
+        throw new Error('All sync operations failed')
       }
     } catch (error) {
       console.error('Error during update:', error)
+      setStatusText("")
       toast.error(`Failed to update: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       // Stop frequent polling
       clearInterval(pollInterval)
       setIsUpdating(false)
+      // Clear status text after a delay
+      setTimeout(() => setStatusText(""), 2000)
     }
   }
 
@@ -180,15 +244,19 @@ export function ActivityQueue() {
     <div className="flex border-t border-neutral-200 bg-neutral-50 shadow-md shrink-0 w-full overflow-hidden">
       <div className="px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 w-full">
         <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
             <h2 className="text-xs sm:text-sm font-semibold text-neutral-900">
               Recent Activity
             </h2>
-            {lastSyncTime && (
+            {isUpdating && statusText ? (
+              <p className="text-[10px] text-blue-600 font-medium animate-pulse truncate">
+                {statusText}
+              </p>
+            ) : lastSyncTime ? (
               <p className="text-[10px] text-neutral-500">
                 Last synced: {formatTimestamp(lastSyncTime)}
               </p>
-            )}
+            ) : null}
           </div>
           <Button
             onClick={handleUpdate}
