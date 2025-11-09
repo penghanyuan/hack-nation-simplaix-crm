@@ -22,4 +22,7 @@ export {
   contactLookupTool,
   searchContact,
   type ContactLookupResult,
+  taskLookupTool,
+  searchTask,
+  type TaskLookupResult,
 } from './tools';

@@ -151,6 +151,7 @@ export async function searchContact(params: {
 export const contactLookupTool = tool({
   description: `Search for an existing contact in the CRM database using case-insensitive matching.
 Use this tool to check if a contact already exists and detect if any information has changed.
+Consider synonyms and variations of all the fields (name, companyName, title, phone, linkedin, x, etc.).
 Search by email (most reliable), name, company name, or job title (role).
 Returns whether the contact was found, their current details, and if any fields have changed.
 If hasChanges is true, the contact exists but has updated information that should be tracked.`,

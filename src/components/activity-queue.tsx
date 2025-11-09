@@ -17,6 +17,7 @@ import type { Activity, ActivityType } from "@/lib/types"
 import type { Activity as DBActivity } from "@/db/schema"
 import { RefreshCw, Check, X } from "lucide-react"
 import { updateLatestEmail, formatAnalysisMessage } from "@/lib/email-update"
+import { toast } from "sonner"
 
 // Fetcher function for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -86,10 +87,10 @@ export function ActivityQueue() {
         },
       })
 
-      alert(formatAnalysisMessage(result))
+      toast.success("Activity updated successfully")
     } catch (error) {
       console.error('Error during update:', error)
-      alert(`Failed to update: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toast.error(`Failed to update: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setIsUpdating(false)
     }
@@ -220,7 +221,7 @@ function ActivityCard({
       }
     } catch (error) {
       console.error('Error accepting activity:', error)
-      alert(`Failed to accept: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toast.error(`Failed to accept: ${error instanceof Error ? error.message : 'Unknown error'}`)
       // Revalidate on error
       await onActivityProcessed()
     } finally {
@@ -249,7 +250,7 @@ function ActivityCard({
       await onActivityProcessed()
     } catch (error) {
       console.error('Error rejecting activity:', error)
-      alert(`Failed to reject: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      toast.error(`Failed to reject: ${error instanceof Error ? error.message : 'Unknown error'}`)
       // Revalidate on error
       await onActivityProcessed()
     } finally {

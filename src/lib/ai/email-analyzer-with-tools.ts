@@ -2,6 +2,7 @@ import { generateText, Output, stepCountIs } from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { contactLookupTool } from './tools/contact-lookup';
+import { taskLookupTool } from './tools/task-lookup';
 import type { EmailData, EmailAnalysisResult } from './email-analyzer';
 
 /**
@@ -95,9 +96,9 @@ export async function analyzeEmailWithTools(
     ? createOpenAI({ apiKey: options.apiKey })
     : openai;
 
-  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts, detects updates, and finds tasks.
-
-IMPORTANT: Before extracting any contact, you MUST use the contactLookup tool to check if they already exist in the database.
+  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts, detects updates, and finds tasks while avoiding duplicates.
+Don't generate tasks or contacts that are not related to client management.
+IMPORTANT: Before extracting any contact or task, you MUST use the lookup tools to check if they already exist in the database.
 
 WORKFLOW:
 1. Read the email and identify all potential contacts (sender, recipients, people mentioned)
@@ -108,8 +109,14 @@ WORKFLOW:
    - If found: false → Add to "contacts" array (new contact)
    - If found: true AND hasChanges: true → Add to "contactUpdates" array with the changes
    - If found: true AND hasChanges: false → Skip (no changes needed)
-4. Extract all tasks from the email
-5. Return the final structured output
+4. Identify all potential tasks (action items, meetings, follow-ups, to-dos)
+5. For EACH potential task, call the taskLookup tool with task information:
+   - Always include: title (required)
+   - Also include if available: description, companyName, contactEmails
+6. Based on taskLookup response:
+   - If found: false → Add to "tasks" array (new task)
+   - If found: true → Skip (task already exists, no duplicates)
+7. Return the final structured output
 
 CONTACT EXTRACTION RULES (NEW CONTACTS):
 - Use contactLookup tool for EVERY potential contact
@@ -131,24 +138,29 @@ CONTACT UPDATE RULES (EXISTING CONTACTS WITH CHANGES):
   * changes: Copy the "changes" array from contactLookup result
 - This helps track what information has been updated
 
-TASK EXTRACTION RULES:
-- Extract ALL action items, meetings, follow-ups, or to-dos
-- For each task, extract:
-  * title: Brief summary
+TASK EXTRACTION RULES (AVOIDING DUPLICATES):
+- Use taskLookup tool for EVERY potential task
+- Only include in "tasks" array if taskLookup returns found: false
+- For each NEW task, extract:
+  * title: Brief summary of the task (REQUIRED)
   * description: Detailed description (nullable)
   * companyName: Related company if mentioned (nullable)
-  * contactEmails: Array of email addresses involved
+  * contactEmails: Array of email addresses involved (nullable)
   * status: 'todo' (default), 'in_progress', or 'done'
   * priority: 'low', 'medium' (default), 'high', or 'urgent'
   * dueDate: ISO 8601 format if mentioned (nullable)
+- Tasks are considered duplicates if they have the same title, description, company, and contact emails
+- DO NOT include tasks where taskLookup returns found: true
 
 IMPORTANT NOTES:
-- ALWAYS call contactLookup with ALL available information (email, name, company, title, phone, linkedin, x)
-- The tool detects changes automatically - use its response to populate contactUpdates
-- Return empty arrays if no new contacts, no updates, or no tasks found
-- Be thorough - check each contact individually`;
+- ALWAYS call contactLookup for each contact with ALL available information
+- ALWAYS call taskLookup for each task with ALL available information (title, description, company, emails)
+- The tools detect duplicates automatically - only include items where found: false
+- Return empty arrays if no new contacts, no updates, or no new tasks found
+- Consider synonyms and variations of all the fields (name, companyName, title, phone, linkedin, x, task description,task title, etc.).
+- Be thorough - check each contact and task individually with their respective lookup tools`;
 
-  const userPrompt = `Analyze this email and extract NEW contacts (that don't exist in DB) and tasks:
+  const userPrompt = `Analyze this email and extract NEW contacts (that don't exist in DB) and NEW tasks (that don't exist in DB):
 
 Subject: ${emailData.subject}
 From: ${emailData.from.name || 'Unknown'} <${emailData.from.email}>
@@ -159,12 +171,14 @@ ${emailData.body}
 
 STEPS:
 1. Use contactLookup tool to check each potential contact
-2. Only extract contacts NOT found in the database
-3. Extract all tasks from the email
+2. Only extract contacts NOT found in the database (or with changes)
+3. Use taskLookup tool to check each potential task
+4. Only extract tasks NOT found in the database
 
 Return a structured output with:
 - contacts: array of NEW contacts only (not found in database)
-- tasks: array of all tasks found`;
+- contactUpdates: array of existing contacts with changes (optional)
+- tasks: array of NEW tasks only (not found in database)`;
 
   try {
     console.log('🔍 Starting email analysis with contact lookup...');
@@ -175,8 +189,9 @@ Return a structured output with:
       system: systemPrompt,
       tools: {
         contactLookup: contactLookupTool,
+        taskLookup: taskLookupTool,
       },
-      stopWhen: stepCountIs(maxSteps), // Allow multiple tool calls to check each contact
+      stopWhen: stepCountIs(maxSteps), // Allow multiple tool calls to check each contact and task
       experimental_output: Output.object({
         schema: emailAnalysisSchema,
       }),

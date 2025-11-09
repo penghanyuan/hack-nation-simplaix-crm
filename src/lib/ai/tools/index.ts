@@ -6,3 +6,6 @@
 export { contactLookupTool, searchContact } from './contact-lookup';
 export type { ContactLookupResult } from './contact-lookup';
 
+export { taskLookupTool, searchTask } from './task-lookup';
+export type { TaskLookupResult } from './task-lookup';
+
