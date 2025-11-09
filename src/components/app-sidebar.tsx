@@ -83,7 +83,7 @@ export function AppSidebar() {
         ) : null}
         {state === "expanded" ? (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-xs text-neutral-500">Settings</SidebarGroupLabel>
+            {/* <SidebarGroupLabel className="text-xs text-neutral-500">Settings</SidebarGroupLabel> */}
             <SidebarGroupContent className="px-2 space-y-2">
               {/* <EmailSyncHoursSelector /> */}
             </SidebarGroupContent>

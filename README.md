@@ -13,6 +13,7 @@ Simplaix CRM combines modern web technologies with AI agents to provide:
 
 ## Tech Stack
 
+![Architecture](./public/archi.png)
 ### Frontend
 - **Next.js 15** (React 19) - App router with server components
 - **CopilotKit** - AI copilot sidebar and state management
