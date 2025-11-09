@@ -1,8 +1,20 @@
+import { useState } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GripVertical } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { GripVertical, Trash2 } from 'lucide-react';
 
 interface Task {
   id: string;
@@ -20,9 +32,13 @@ interface Task {
 
 interface TaskCardProps {
   task: Task;
+  onDelete?: (taskId: string) => Promise<void>;
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export function TaskCard({ task, onDelete }: TaskCardProps) {
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const {
     attributes,
     listeners,
@@ -36,6 +52,20 @@ export function TaskCard({ task }: TaskCardProps) {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await onDelete(task.id);
+      setShowDeleteDialog(false);
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const getPriorityColor = (priority: string | null) => {
@@ -74,23 +104,24 @@ export function TaskCard({ task }: TaskCardProps) {
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
-      <Card className="hover:shadow-md transition-shadow cursor-move">
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <CardTitle className="text-sm font-medium line-clamp-2 mb-1.5">
-                {task.title}
-              </CardTitle>
-              <Badge className={`text-xs ${getStatusColor(task.status)}`} variant="outline">
-                {getStatusLabel(task.status)}
-              </Badge>
+    <>
+      <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
+        <Card className="hover:shadow-md transition-shadow cursor-move">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1">
+                <CardTitle className="text-sm font-medium line-clamp-2 mb-1.5">
+                  {task.title}
+                </CardTitle>
+                <Badge className={`text-xs ${getStatusColor(task.status)}`} variant="outline">
+                  {getStatusLabel(task.status)}
+                </Badge>
+              </div>
+              <div {...listeners} className="cursor-grab active:cursor-grabbing">
+                <GripVertical className="h-4 w-4 text-neutral-400" />
+              </div>
             </div>
-            <div {...listeners} className="cursor-grab active:cursor-grabbing">
-              <GripVertical className="h-4 w-4 text-neutral-400" />
-            </div>
-          </div>
-        </CardHeader>
+          </CardHeader>
         <CardContent className="space-y-2">
           {task.description && (
             <p className="text-xs text-neutral-600 line-clamp-2">
@@ -133,9 +164,49 @@ export function TaskCard({ task }: TaskCardProps) {
               )}
             </div>
           )}
+          {onDelete && (
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-neutral-400 hover:text-red-600 hover:bg-red-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDeleteDialog(true);
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Task</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete &quot;{task.title}&quot;? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              e.preventDefault();
+              handleDelete();
+            }}
+            disabled={isDeleting}
+            className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
 

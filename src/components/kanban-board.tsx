@@ -34,6 +34,7 @@ interface Task {
 interface KanbanBoardProps {
   tasks: Task[];
   onTaskUpdate: (taskId: string, newStatus: string) => Promise<void>;
+  onTaskDelete: (taskId: string) => Promise<void>;
 }
 
 const COLUMNS = [
@@ -42,7 +43,7 @@ const COLUMNS = [
   { id: 'done', title: 'Done', color: 'bg-green-50 border-green-300' },
 ];
 
-export function KanbanBoard({ tasks, onTaskUpdate }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, onTaskUpdate, onTaskDelete }: KanbanBoardProps) {
   const [items, setItems] = useState<Task[]>(tasks);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [originalStatus, setOriginalStatus] = useState<string | null>(null);
@@ -209,6 +210,7 @@ export function KanbanBoard({ tasks, onTaskUpdate }: KanbanBoardProps) {
             title={column.title}
             tasks={tasksByStatus[column.id as keyof typeof tasksByStatus]}
             color={column.color}
+            onTaskDelete={onTaskDelete}
           />
         ))}
       </div>

@@ -60,6 +60,27 @@ export default function TasksPage() {
     }
   }
 
+  const handleTaskDelete = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete task')
+      }
+
+      // Revalidate SWR cache to get fresh data
+      await mutate()
+
+      toast.success("Task deleted successfully")
+    } catch (error) {
+      console.error('Error deleting task:', error)
+      toast.error("Failed to delete task")
+      throw error
+    }
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <header className="flex h-12 sm:h-14 shrink-0 items-center gap-2 border-b border-neutral-200 px-2 sm:px-4">
@@ -77,7 +98,7 @@ export default function TasksPage() {
           </div>
         ) : (
           <div className="h-full">
-            <KanbanBoard tasks={tasks} onTaskUpdate={handleTaskUpdate} />
+            <KanbanBoard tasks={tasks} onTaskUpdate={handleTaskUpdate} onTaskDelete={handleTaskDelete} />
           </div>
         )}
       </div>

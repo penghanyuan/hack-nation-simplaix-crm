@@ -21,9 +21,10 @@ interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   color: string;
+  onTaskDelete: (taskId: string) => Promise<void>;
 }
 
-export function KanbanColumn({ id, title, tasks, color }: KanbanColumnProps) {
+export function KanbanColumn({ id, title, tasks, color, onTaskDelete }: KanbanColumnProps) {
   const { setNodeRef } = useDroppable({ id });
 
   return (
@@ -42,7 +43,7 @@ export function KanbanColumn({ id, title, tasks, color }: KanbanColumnProps) {
       >
         <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id} task={task} onDelete={onTaskDelete} />
           ))}
         </SortableContext>
         {tasks.length === 0 && (
