@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { Users, CheckSquare } from "lucide-react"
+import { Users, CheckSquare, Handshake } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +23,11 @@ const navigation = [
     title: "People",
     icon: Users,
     href: "/people",
+  },
+  {
+    title: "Deals",
+    icon: Handshake,
+    href: "/deals",
   },
   {
     title: "Tasks",

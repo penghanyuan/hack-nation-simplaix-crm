@@ -84,10 +84,20 @@ export interface EmailAnalysisResult {
     priority: 'low' | 'medium' | 'high' | 'urgent';
     dueDate?: string;
   }>;
+  deals?: Array<{
+    title: string;
+    companyName?: string;
+    contactEmail?: string;
+    stage: 'new' | 'in_discussion' | 'proposal' | 'won' | 'lost';
+    amount?: number;
+    nextAction?: string;
+    nextActionDate?: string;
+  }>;
 }
 
 export type ContactEntry = EmailAnalysisResult['contacts'][0];
 export type TaskEntry = EmailAnalysisResult['tasks'][0];
+export type DealEntry = NonNullable<EmailAnalysisResult['deals']>[0];
 
 /**
  * Multi-step agent that analyzes email content and extracts both contacts and tasks

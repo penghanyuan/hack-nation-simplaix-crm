@@ -16,6 +16,7 @@ export interface GmailEmail {
   body: string;
   date: Date;
   snippet: string;
+  folder: 'inbox' | 'sent';
 }
 
 /**
@@ -183,6 +184,7 @@ export async function fetchRecentEmails(
         body: body || fullMessage.data.snippet || '',
         date: new Date(parsed.date),
         snippet: fullMessage.data.snippet || '',
+        folder: 'inbox', // Default to inbox for fetchRecentEmails
       });
     } catch (error) {
       console.error(`Error fetching message ${message.id}:`, error);
@@ -193,7 +195,7 @@ export async function fetchRecentEmails(
 }
 
 /**
- * Fetch emails from Gmail by hours back
+ * Fetch emails from Gmail by hours back (both inbox and sent)
  */
 export async function fetchEmailsByHours(
   oauth2Client: OAuth2Client,
@@ -207,18 +209,26 @@ export async function fetchEmailsByHours(
   dateAfter.setHours(dateAfter.getHours() - hoursBack);
   const afterQuery = `after:${Math.floor(dateAfter.getTime() / 1000)}`;
 
-  // Fetch message IDs (from inbox, sent, or important categories)
-  const response = await gmail.users.messages.list({
+  // Fetch emails from inbox
+  const inboxResponse = await gmail.users.messages.list({
     userId: 'me',
-    maxResults,
-    q: `${afterQuery} (in:inbox OR in:sent) -in:spam -in:trash`,
+    maxResults: Math.floor(maxResults / 2),
+    q: `${afterQuery} in:inbox -in:spam -in:trash`,
   });
 
-  const messages = response.data.messages || [];
+  // Fetch emails from sent folder
+  const sentResponse = await gmail.users.messages.list({
+    userId: 'me',
+    maxResults: Math.floor(maxResults / 2),
+    q: `${afterQuery} in:sent -in:spam -in:trash`,
+  });
+
+  const inboxMessages = inboxResponse.data.messages || [];
+  const sentMessages = sentResponse.data.messages || [];
   const emails: GmailEmail[] = [];
 
-  // Fetch full message details for each ID
-  for (const message of messages) {
+  // Process inbox messages
+  for (const message of inboxMessages) {
     if (!message.id) continue;
 
     try {
@@ -251,11 +261,56 @@ export async function fetchEmailsByHours(
         body: body || fullMessage.data.snippet || '',
         date: new Date(parsed.date),
         snippet: fullMessage.data.snippet || '',
+        folder: 'inbox',
       });
     } catch (error) {
-      console.error(`Error fetching message ${message.id}:`, error);
+      console.error(`Error fetching inbox message ${message.id}:`, error);
     }
   }
+
+  // Process sent messages
+  for (const message of sentMessages) {
+    if (!message.id) continue;
+
+    try {
+      const fullMessage = await gmail.users.messages.get({
+        userId: 'me',
+        id: message.id,
+        format: 'full',
+      });
+
+      const headers = fullMessage.data.payload?.headers || [];
+      const parsed = parseHeaders(headers);
+
+      let body = '';
+      const payload = fullMessage.data.payload;
+
+      // Handle different email structures
+      if (payload?.body?.data) {
+        body = decodeBody(payload.body.data);
+      } else if (payload?.parts) {
+        body = extractTextFromParts(payload.parts);
+      }
+
+      emails.push({
+        id: message.id,
+        threadId: fullMessage.data.threadId || '',
+        from: parsed.from,
+        to: parsed.to,
+        cc: parsed.cc,
+        subject: parsed.subject,
+        body: body || fullMessage.data.snippet || '',
+        date: new Date(parsed.date),
+        snippet: fullMessage.data.snippet || '',
+        folder: 'sent',
+      });
+    } catch (error) {
+      console.error(`Error fetching sent message ${message.id}:`, error);
+    }
+  }
+
+  // Sort by date descending
+  emails.sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return emails;
 }
@@ -384,6 +439,7 @@ export async function fetchEmailsSinceHistory(
           body: body || fullMessage.data.snippet || '',
           date: new Date(parsed.date),
           snippet: fullMessage.data.snippet || '',
+          folder: 'inbox', // History API only tracks inbox by default
         });
       } catch (error) {
         console.error(`Error fetching message ${messageId}:`, error);

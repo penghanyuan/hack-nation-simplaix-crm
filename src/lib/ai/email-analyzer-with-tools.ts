@@ -51,12 +51,26 @@ const taskInfoSchema = z.object({
 });
 
 /**
- * Multi-step analysis schema - extracts contacts, contact updates, and tasks
+ * Schema for deal information
+ */
+const dealInfoSchema = z.object({
+  title: z.string().describe('Title or name of the deal (e.g., "Q4 Enterprise License - Acme Corp")'),
+  companyName: z.string().nullable().describe('Company name involved in the deal'),
+  contactEmail: z.string().nullable().describe('Primary contact email for this deal'),
+  stage: z.enum(['new', 'in_discussion', 'proposal', 'won', 'lost']).describe('Current stage of the deal (default: new)'),
+  amount: z.number().nullable().describe('Deal value/amount in dollars if mentioned'),
+  nextAction: z.string().nullable().describe('Next action or step for this deal'),
+  nextActionDate: z.string().nullable().describe('Date for next action in ISO 8601 format'),
+});
+
+/**
+ * Multi-step analysis schema - extracts contacts, contact updates, tasks, and deals
  */
 const emailAnalysisSchema = z.object({
   contacts: z.array(contactInfoSchema).describe('Array of NEW contacts found in the email that do not already exist in the database'),
   contactUpdates: z.array(contactUpdateSchema).describe('Array of EXISTING contacts with updated information (use data from contactLookup tool)').optional(),
   tasks: z.array(taskInfoSchema).describe('Array of tasks found in the email (can be empty if none found)').optional(),
+  deals: z.array(dealInfoSchema).describe('Array of deals found in the email - ONLY extract from SENT emails (can be empty if none found)').optional(),
 });
 
 /**
@@ -96,9 +110,14 @@ export async function analyzeEmailWithTools(
     ? createOpenAI({ apiKey: options.apiKey })
     : openai;
 
-  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts, detects updates, and finds tasks while avoiding duplicates.
+  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts, detects updates, finds tasks, and identifies deals while avoiding duplicates.
 Don't generate tasks or contacts that are not related to client management.
 IMPORTANT: You MUST retrieve the full contact and task lists first, then compare extracted items to avoid duplicates.
+
+EMAIL TYPE DETECTION:
+- Check the email metadata to determine if this is from INBOX or SENT folder
+- INBOX emails: Extract contacts and tasks as usual
+- SENT emails: Extract contacts, tasks, AND deals (opportunities you're pursuing with clients)
 
 WORKFLOW:
 1. FIRST: Call contactList tool to get ALL existing contacts from the database
@@ -116,7 +135,8 @@ WORKFLOW:
    - Use case-insensitive comparison and consider semantic similarity
    - If NO match found → Add to "tasks" array (new task)
    - If match found → Skip (task already exists, avoid duplicates)
-7. Return the final structured output
+7. IF this is a SENT email: Identify potential deals (sales opportunities, proposals, negotiations)
+8. Return the final structured output
 
 CONTACT EXTRACTION RULES (NEW CONTACTS):
 - Compare each potential contact against the full contact list from contactList tool
@@ -154,19 +174,43 @@ TASK EXTRACTION RULES (AVOIDING DUPLICATES):
   * priority: 'low', 'medium' (default), 'high', or 'urgent'
   * dueDate: ISO 8601 format if mentioned (nullable)
 
+DEAL EXTRACTION RULES (FOR SENT EMAILS ONLY):
+- ONLY extract deals from emails in the SENT folder (emails you sent to clients/prospects)
+- Deals represent sales opportunities, business proposals, negotiations, or potential revenue
+- Look for indicators like:
+  * Proposals being sent
+  * Pricing discussions
+  * Contract negotiations
+  * Product/service offerings
+  * Demo or trial arrangements
+  * Partnership discussions
+  * Quote requests or responses
+- For each deal, extract:
+  * title: Name of the deal - be descriptive (e.g., "Q4 Enterprise License - Acme Corp")
+  * companyName: Company involved (nullable)
+  * contactEmail: Primary contact email (nullable)
+  * stage: 'new' (default for first contact), 'in_discussion', 'proposal', 'won', or 'lost'
+  * amount: Dollar value if mentioned (nullable)
+  * nextAction: What needs to happen next (nullable)
+  * nextActionDate: When the next action should occur (nullable, ISO 8601)
+- Do NOT extract deals from inbox emails (incoming emails)
+- Do NOT extract deals if the email is just a regular conversation without business opportunity context
+
 IMPORTANT NOTES:
 - ALWAYS call contactList and taskList tools FIRST before doing any extraction
 - YOU are responsible for comparing and detecting duplicates, not the tools
 - Be thorough and intelligent about duplicate detection - consider variations and synonyms
-- Return empty arrays if no new contacts, no updates, or no new tasks found
+- Return empty arrays if no new contacts, no updates, no new tasks, or no deals found
 - Consider semantic similarity, not just exact string matches
-- Be conservative: when in doubt, treat as a duplicate rather than creating duplicates`;
+- Be conservative: when in doubt, treat as a duplicate rather than creating duplicates
+- Deals are ONLY extracted from SENT emails, not INBOX emails`;
 
-  const userPrompt = `Analyze this email and extract NEW contacts (that don't exist in DB) and NEW tasks (that don't exist in DB):
+  const userPrompt = `Analyze this email and extract NEW contacts (that don't exist in DB), NEW tasks (that don't exist in DB), and deals (if SENT email):
 
 Subject: ${emailData.subject}
 From: ${emailData.from.name || 'Unknown'} <${emailData.from.email}>
 ${emailData.date ? `Date: ${emailData.date}` : ''}
+Email Folder: ${(emailData as any).folder || 'inbox'}
 
 Body:
 ${emailData.body}
@@ -178,11 +222,13 @@ STEPS:
 4. Compare each extracted contact against the contact list - only include if no duplicate exists
 5. Extract all potential tasks from the email
 6. Compare each extracted task against the task list - only include if no duplicate exists
+7. IF this is a SENT email: Extract potential deals (business opportunities, proposals, negotiations)
 
 Return a structured output with:
 - contacts: array of NEW contacts only (not duplicates of existing contacts in database)
 - contactUpdates: array of existing contacts with updated information (optional)
-- tasks: array of NEW tasks only (not duplicates of existing tasks in database)`;
+- tasks: array of NEW tasks only (not duplicates of existing tasks in database)
+- deals: array of deals ONLY if this is a SENT email (empty array otherwise)`;
 
   try {
     console.log('🔍 Starting email analysis with full list retrieval...');
@@ -206,6 +252,7 @@ Return a structured output with:
       contactsFound: rawResult.contacts?.length || 0,
       contactUpdatesFound: rawResult.contactUpdates?.length || 0,
       tasksFound: rawResult.tasks?.length || 0,
+      dealsFound: rawResult.deals?.length || 0,
       stepsUsed: result.steps.length,
     });
 
@@ -258,12 +305,22 @@ Return a structured output with:
         priority: task.priority,
         dueDate: task.dueDate || undefined,
       })) || [],
+      deals: rawResult.deals?.map(deal => ({
+        title: deal.title,
+        companyName: deal.companyName || undefined,
+        contactEmail: deal.contactEmail || undefined,
+        stage: deal.stage,
+        amount: deal.amount || undefined,
+        nextAction: deal.nextAction || undefined,
+        nextActionDate: deal.nextActionDate || undefined,
+      })) || [],
     };
 
     console.log('🧹 Final result:', {
       newContacts: cleanedResult.contacts.length,
       contactUpdates: cleanedResult.contactUpdates?.length || 0,
       tasks: cleanedResult.tasks.length,
+      deals: cleanedResult.deals.length,
     });
 
     return cleanedResult;

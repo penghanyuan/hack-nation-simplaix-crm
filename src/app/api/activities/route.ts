@@ -18,6 +18,15 @@ type TaskExtraction = {
   dueDate?: string
 }
 
+type DealExtraction = {
+  title?: string
+  companyName?: string
+  contactEmail?: string
+  stage?: string
+  amount?: number
+  nextAction?: string
+}
+
 export async function GET() {
   try {
     // Fetch pending activities from database
@@ -55,6 +64,22 @@ export async function GET() {
           const dueDate = new Date(extractedData.dueDate)
           description += ` • Due: ${dueDate.toLocaleDateString()}`
         }
+      } else if (activity.entityType === 'deal') {
+        const extractedData = activity.extractedData as DealExtraction
+        title = `${extractedData.title ?? ''}`
+        description = ''
+        if (extractedData.companyName) {
+          description += `${extractedData.companyName} • `
+        }
+        if (extractedData.stage) {
+          description += `Stage: ${extractedData.stage.replace('_', ' ')}`
+        }
+        if (extractedData.amount) {
+          description += ` • $${extractedData.amount.toLocaleString()}`
+        }
+        if (extractedData.contactEmail) {
+          description += ` • Contact: ${extractedData.contactEmail}`
+        }
       }
 
       return {
@@ -64,7 +89,7 @@ export async function GET() {
         title,
         description,
         timestamp: activity.createdAt,
-        entityType: activity.entityType as 'contact' | 'task',
+        entityType: activity.entityType as 'contact' | 'task' | 'deal',
         status: activity.status,
       }
     })

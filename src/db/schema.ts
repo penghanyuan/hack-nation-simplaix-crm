@@ -58,7 +58,8 @@ export const activityStatusEnum = pgEnum('activity_status', [
 
 export const activityEntityTypeEnum = pgEnum('activity_entity_type', [
   'contact',
-  'task'
+  'task',
+  'deal'
 ]);
 
 export const activityActionEnum = pgEnum('activity_action', [

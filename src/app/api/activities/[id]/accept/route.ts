@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getActivityById, markActivityStatus } from '@/services/activityService';
 import { createContact, getContactByEmail, updateContact } from '@/services/contactService';
 import { createTask } from '@/services/taskService';
-import type { ContactActivityPayload, TaskActivityPayload } from '@/lib/activity-payloads';
+import { createDeal } from '@/services/dealService';
+import type { ContactActivityPayload, TaskActivityPayload, DealActivityPayload } from '@/lib/activity-payloads';
 
 /**
  * PATCH /api/activities/[id]/accept
@@ -88,6 +89,24 @@ export async function PATCH(
         dueDate: taskData.dueDate
           ? new Date(taskData.dueDate)
           : undefined,
+      });
+    }
+    // Handle deal activity
+    else if (activity.entityType === 'deal') {
+      const dealData = activity.extractedData as DealActivityPayload;
+
+      // Insert new deal
+      insertedRecord = await createDeal({
+        title: dealData.title,
+        companyName: dealData.companyName || undefined,
+        contactEmail: dealData.contactEmail || undefined,
+        stage: dealData.stage,
+        amount: dealData.amount || undefined,
+        nextAction: dealData.nextAction || undefined,
+        nextActionDate: dealData.nextActionDate
+          ? new Date(dealData.nextActionDate)
+          : undefined,
+        lastActivityAt: activity.sourceEmailDate || activity.createdAt,
       });
     }
 
