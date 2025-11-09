@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import useSWR from "swr"
 import { SidebarTrigger } from "@/components/ui/sidebar"
@@ -11,7 +11,7 @@ import { useCopilotReadable } from "@copilotkit/react-core"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
-export default function PeoplePage() {
+function PeoplePageContent() {
   const searchParams = useSearchParams()
   const highlightEmail = searchParams.get('email')
 
@@ -75,6 +75,14 @@ export default function PeoplePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PeoplePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full">Loading...</div>}>
+      <PeoplePageContent />
+    </Suspense>
   )
 }
 
