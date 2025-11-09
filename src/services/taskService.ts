@@ -2,7 +2,8 @@ import { db } from '@/db';
 import { tasks, type Task, type NewTask } from '@/db/schema';
 import { desc, eq } from 'drizzle-orm';
 
-type TaskUpdate = Partial<Omit<NewTask, 'id'>>;
+type TaskCreate = Omit<NewTask, 'id'>;
+type TaskUpdate = Partial<TaskCreate>;
 
 export async function listTasks(): Promise<Task[]> {
   return db
@@ -11,7 +12,7 @@ export async function listTasks(): Promise<Task[]> {
     .orderBy(desc(tasks.createdAt));
 }
 
-export async function createTask(data: TaskUpdate): Promise<Task> {
+export async function createTask(data: TaskCreate): Promise<Task> {
   const [task] = await db
     .insert(tasks)
     .values(data)

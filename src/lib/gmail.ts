@@ -1,5 +1,10 @@
 import { google } from 'googleapis';
+import type { gmail_v1 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
+
+export function getGmailClient(auth: OAuth2Client) {
+  return google.gmail({ version: 'v1', auth: auth as unknown as string });
+}
 
 export interface GmailEmail {
   id: string;
@@ -32,6 +37,7 @@ export function createOAuth2Client(): OAuth2Client {
 export function getAuthUrl(oauth2Client: OAuth2Client): string {
   const scopes = [
     'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/userinfo.email',
   ];
 
@@ -54,7 +60,7 @@ export async function getTokensFromCode(oauth2Client: OAuth2Client, code: string
 /**
  * Parse email headers
  */
-function parseHeaders(headers: any[]): {
+function parseHeaders(headers: gmail_v1.Schema$MessagePartHeader[] = []): {
   from: string;
   to: string[];
   cc?: string[];
@@ -63,7 +69,10 @@ function parseHeaders(headers: any[]): {
 } {
   const headerMap: { [key: string]: string } = {};
   headers.forEach((header) => {
-    headerMap[header.name.toLowerCase()] = header.value;
+    if (!header.name || typeof header.value === 'undefined') {
+      return;
+    }
+    headerMap[header.name.toLowerCase()] = header.value || '';
   });
 
   return {
@@ -93,10 +102,12 @@ function decodeBody(encodedBody?: string): string {
 /**
  * Extract plain text from email parts (handles multipart emails)
  */
-function extractTextFromParts(parts: any[]): string {
+function extractTextFromParts(parts: gmail_v1.Schema$MessagePart[] = []): string {
   let text = '';
   
   for (const part of parts) {
+    if (!part) continue;
+
     if (part.mimeType === 'text/plain' && part.body?.data) {
       text += decodeBody(part.body.data);
     } else if (part.mimeType === 'text/html' && part.body?.data && !text) {
@@ -121,7 +132,7 @@ export async function fetchRecentEmails(
   maxResults: number = 20,
   daysBack: number = 7
 ): Promise<GmailEmail[]> {
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = getGmailClient(oauth2Client);
 
   // Calculate date for filtering (7 days back)
   const dateAfter = new Date();
@@ -189,7 +200,7 @@ export async function fetchEmailsByHours(
   hoursBack: number = 12,
   maxResults: number = 50
 ): Promise<GmailEmail[]> {
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = getGmailClient(oauth2Client);
 
   // Calculate date for filtering (N hours back)
   const dateAfter = new Date();
@@ -278,7 +289,7 @@ export async function setupGmailWatch(
   oauth2Client: OAuth2Client,
   topicName: string = 'gmail-push'
 ): Promise<WatchResponse> {
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = getGmailClient(oauth2Client);
   
   const response = await gmail.users.watch({
     userId: 'me',
@@ -299,7 +310,7 @@ export async function setupGmailWatch(
  * Stop Gmail push notifications
  */
 export async function stopGmailWatch(oauth2Client: OAuth2Client): Promise<void> {
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = getGmailClient(oauth2Client);
   await gmail.users.stop({ userId: 'me' });
 }
 
@@ -310,7 +321,7 @@ export async function fetchEmailsSinceHistory(
   oauth2Client: OAuth2Client,
   startHistoryId: string
 ): Promise<GmailEmail[]> {
-  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  const gmail = getGmailClient(oauth2Client);
   
   try {
     // Get history of changes since the last historyId
@@ -386,3 +397,52 @@ export async function fetchEmailsSinceHistory(
   }
 }
 
+/**
+ * Create a Gmail draft
+ */
+export async function createGmailDraft(
+  oauth2Client: OAuth2Client,
+  to: string[],
+  subject: string,
+  body: string,
+  cc?: string[]
+): Promise<{ id: string; message: { id: string } }> {
+  const gmail = getGmailClient(oauth2Client);
+
+  // Create the email message in RFC 2822 format
+  const messageParts = [
+    `To: ${to.join(', ')}`,
+    cc && cc.length > 0 ? `Cc: ${cc.join(', ')}` : '',
+    'Content-Type: text/plain; charset=utf-8',
+    'MIME-Version: 1.0',
+    `Subject: ${subject}`,
+    '',
+    body,
+  ].filter(Boolean);
+
+  const message = messageParts.join('\n');
+  
+  // Encode the message in base64url format
+  const encodedMessage = Buffer.from(message)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  // Create the draft
+  const response = await gmail.users.drafts.create({
+    userId: 'me',
+    requestBody: {
+      message: {
+        raw: encodedMessage,
+      },
+    },
+  });
+
+  return {
+    id: response.data.id || '',
+    message: {
+      id: response.data.message?.id || '',
+    },
+  };
+}

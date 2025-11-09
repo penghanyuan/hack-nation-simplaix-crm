@@ -3,6 +3,8 @@ import { analyzeEmailWithTools, type EmailData } from '@/lib/ai';
 import { createPendingActivity, markActivityStatus } from '@/services/activityService';
 import { createContact, getContactByEmail, updateContact } from '@/services/contactService';
 import { createTask } from '@/services/taskService';
+import type { Activity } from '@/db/schema';
+import type { ContactActivityPayload, TaskActivityPayload } from '@/lib/activity-payloads';
 
 /**
  * POST /api/ai/analyze-email
@@ -38,7 +40,7 @@ export async function POST(request: NextRequest) {
     const analysis = await analyzeEmailWithTools(email as EmailData);
 
     // Save all extracted data as pending activities
-    const createdActivities = [];
+    const createdActivities: Activity[] = [];
 
     // Create activity for each extracted contact (new contacts)
     for (const contactData of analysis.contacts) {
@@ -92,44 +94,36 @@ export async function POST(request: NextRequest) {
 
       // Auto-accept contact activities
       for (const activity of createdActivities.filter(a => a.entityType === 'contact')) {
-        const contactData = activity.extractedData as any;
+        const contactData = activity.extractedData as ContactActivityPayload;
+        const {
+          action: contactAction = 'create',
+          existingContactId,
+          changes,
+          ...contactFields
+        } = contactData;
 
-        // Check if this is an update or create action
-        if (contactData.action === 'update') {
-          // This is a contact update - update the existing contact
-          const { existingContactId, changes, action, ...updateFields } = contactData;
-          
-          // Update the contact in the database
-          const updatedContact = await updateContact(existingContactId, updateFields);
+        if (contactAction === 'update' && existingContactId) {
+          const updatedContact = await updateContact(existingContactId, contactFields);
 
           if (updatedContact) {
-            updatedContacts.push({ 
-              data: updatedContact, 
+            updatedContacts.push({
+              data: updatedContact,
               action: 'updated',
-              changes: changes 
+              changes,
             });
 
-            // Mark activity as accepted
             await markActivityStatus(activity.id, 'accepted');
           }
         } else {
-          // This is a new contact - create it
-          const { action, ...newContactFields } = contactData;
-          
-          // Check if contact already exists (double check)
-          const existingContact = await getContactByEmail(newContactFields.email);
+          const existingContact = await getContactByEmail(contactFields.email);
 
           if (!existingContact) {
-            const newContact = await createContact(newContactFields);
+            const newContact = await createContact(contactFields);
 
             insertedContacts.push({ data: newContact, action: 'created' });
-
-            // Mark activity as accepted
             await markActivityStatus(activity.id, 'accepted');
           } else {
             insertedContacts.push({ data: existingContact, action: 'already_exists' });
-
-            // Mark activity as accepted (but contact existed)
             await markActivityStatus(activity.id, 'accepted');
           }
         }
@@ -137,7 +131,7 @@ export async function POST(request: NextRequest) {
 
       // Auto-accept task activities
       for (const activity of createdActivities.filter(a => a.entityType === 'task')) {
-        const taskData = activity.extractedData as typeof analysis.tasks[0];
+        const taskData = activity.extractedData as TaskActivityPayload;
 
         const newTask = await createTask({
           title: taskData.title,
@@ -146,14 +140,10 @@ export async function POST(request: NextRequest) {
           contactEmails: taskData.contactEmails,
           status: taskData.status || 'todo',
           priority: taskData.priority || 'medium',
-          dueDate: taskData.dueDate
-            ? new Date(taskData.dueDate)
-            : undefined,
+          dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
         });
 
         insertedTasks.push(newTask);
-
-        // Mark activity as accepted
         await markActivityStatus(activity.id, 'accepted');
       }
 

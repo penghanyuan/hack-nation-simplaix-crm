@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { Users, CheckSquare, TestTube2 } from "lucide-react"
+import { Users, CheckSquare } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -88,4 +88,3 @@ export function AppSidebar() {
     </Sidebar>
   )
 }
-

@@ -8,6 +8,7 @@ interface Task {
   description: string | null;
   companyName: string | null;
   contactEmails: string[] | null;
+  tags: string[] | null;
   status: string;
   priority: string | null;
   dueDate: string | null;

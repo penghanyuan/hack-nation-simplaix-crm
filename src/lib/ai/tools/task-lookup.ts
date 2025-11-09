@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { db } from '@/db';
 import { tasks } from '@/db/schema';
-import { sql, and, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 /**
  * Task lookup result type
@@ -15,6 +15,7 @@ export interface TaskLookupResult {
     description?: string;
     companyName?: string;
     contactEmails: string[];
+    tags: string[];
     status: string;
     priority: string;
   };
@@ -97,6 +98,7 @@ export async function searchTask(params: {
                 description: task.description || undefined,
                 companyName: task.companyName || undefined,
                 contactEmails: task.contactEmails as string[],
+                tags: (task.tags as string[]) || ['auto'],
                 status: task.status,
                 priority: task.priority || 'medium',
               },
@@ -116,6 +118,7 @@ export async function searchTask(params: {
           description: task.description || undefined,
           companyName: task.companyName || undefined,
           contactEmails: (task.contactEmails as string[]) || [],
+          tags: (task.tags as string[]) || ['auto'],
           status: task.status,
           priority: task.priority || 'medium',
         },
@@ -165,4 +168,3 @@ Tasks are considered duplicates if they have the same title, description, compan
     return result;
   },
 });
-

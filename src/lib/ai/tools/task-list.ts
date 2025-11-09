@@ -13,6 +13,7 @@ export interface TaskListResult {
     description?: string;
     companyName?: string;
     contactEmails: string[];
+    tags: string[];
     status: string;
     priority: string;
     dueDate?: string;
@@ -36,6 +37,7 @@ export async function getAllTasks(): Promise<TaskListResult> {
         description: tasks.description,
         companyName: tasks.companyName,
         contactEmails: tasks.contactEmails,
+        tags: tasks.tags,
         status: tasks.status,
         priority: tasks.priority,
         dueDate: tasks.dueDate,
@@ -52,6 +54,7 @@ export async function getAllTasks(): Promise<TaskListResult> {
         description: task.description || undefined,
         companyName: task.companyName || undefined,
         contactEmails: (task.contactEmails as string[]) || [],
+        tags: (task.tags as string[]) || ['auto'],
         status: task.status,
         priority: task.priority || 'medium',
         dueDate: task.dueDate ? task.dueDate.toISOString() : undefined,

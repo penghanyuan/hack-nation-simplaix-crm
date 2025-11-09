@@ -1,3 +1,5 @@
+import type { EmailAnalysisResult } from '@/lib/ai';
+
 /**
  * Email update utilities
  * Handles fetching, saving, and analyzing emails from Gmail
@@ -6,33 +8,27 @@
 export interface EmailUpdateResult {
   success: boolean;
   message: string;
-  analysis?: {
-    contacts: Array<{
-      name: string;
-      email: string;
-      companyName?: string;
-      title?: string;
-    }>;
-    tasks: Array<{
-      title: string;
-      companyName?: string;
-      contactEmails: string[];
-      stage: string;
-      amount?: number;
-      nextAction?: string;
-      nextActionDate?: string;
-    }>;
-  };
+  analysis?: EmailAnalysisResult;
   error?: string;
 }
 
 export interface EmailUpdateCallbacks {
   onStart?: () => void;
-  onFetchEmail?: (email: any) => void;
+  onFetchEmail?: (email: SyncedEmail) => void;
   onSaveEmail?: () => void;
-  onAnalyze?: (analysis: any) => void;
+  onAnalyze?: (analysis: EmailAnalysisResult) => void;
   onComplete?: (result: EmailUpdateResult) => void;
   onError?: (error: Error) => void;
+}
+
+export interface SyncedEmail {
+  id?: string;
+  threadId?: string;
+  from: string;
+  to: string[];
+  subject: string;
+  body: string;
+  date: string;
 }
 
 /**
@@ -66,7 +62,7 @@ export async function updateLatestEmail(
       };
     }
 
-    const email = emailData.email;
+    const email = emailData.email as SyncedEmail;
     console.log('✅ Email fetched:', {
       from: email.from,
       subject: email.subject,
@@ -119,9 +115,15 @@ export async function updateLatestEmail(
       }),
     });
 
-    const analysisData = await analysisResponse.json();
+    type AnalyzeEmailResponse = {
+      success: boolean;
+      analysis?: EmailAnalysisResult;
+      error?: string;
+    };
 
-    if (!analysisResponse.ok) {
+    const analysisData = await analysisResponse.json() as AnalyzeEmailResponse;
+
+    if (!analysisResponse.ok || !analysisData.success || !analysisData.analysis) {
       throw new Error(analysisData.error || 'Failed to analyze email');
     }
 
@@ -212,4 +214,3 @@ export function formatAnalysisMessage(result: EmailUpdateResult): string {
   
   return parts.join('');
 }
-

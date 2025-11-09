@@ -10,7 +10,7 @@ import { createTranscript, getTranscriptByUrl } from '@/services/transcriptServi
 export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => ({ analyze: false }));
-    const { analyze = false, autoInsert = false } = body;
+    const { analyze = false } = body;
 
     console.log('🔄 Starting transcript sync from Vercel Blob...');
 
@@ -121,4 +121,3 @@ export async function GET() {
     blobPrefix: 'transcripts/',
   });
 }
-

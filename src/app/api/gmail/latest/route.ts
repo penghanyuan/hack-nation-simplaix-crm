@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createOAuth2Client } from '@/lib/gmail';
-import { google } from 'googleapis';
+import { createOAuth2Client, getGmailClient } from '@/lib/gmail';
 import { getUserSettings } from '@/services/userSettings';
 
 type GmailMessagePart = {
@@ -44,7 +43,7 @@ export async function GET() {
     });
 
     // Fetch latest email from inbox
-    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    const gmail = getGmailClient(oauth2Client);
     
     // Get the latest message ID
     const listResponse = await gmail.users.messages.list({
