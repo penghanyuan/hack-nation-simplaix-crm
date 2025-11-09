@@ -4,49 +4,41 @@ import { CopilotSidebar } from "@copilotkit/react-ui";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ActivityQueue } from "@/components/activity-queue";
+import { useActivityQueueTool } from "@/hooks/use-activity-queue-tool";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Register the frontend tool for activity queue updates
+  useActivityQueueTool();
+
   return (
     <SidebarProvider defaultOpen={true}>
       <AppSidebar />
       <SidebarInset className="flex flex-col h-screen overflow-hidden">
         <div className="flex-1 overflow-auto bg-white">
           <CopilotSidebar
-            disableSystemMessage={true}
             clickOutsideToClose={false}
+            defaultOpen={false}
+            instructions="You are a helpful CRM assistant. You can help users manage their contacts, tasks, and activities. You have access to tools to update the activity queue and manage email sync settings."
             labels={{
-              title: "Popup Assistant",
-              initial: "👋 Hi, there! You're chatting with an agent.",
+              title: "CRM Assistant",
+              initial: "👋 Hi! I can help you manage your CRM. I can update activities, sync emails, and more. What would you like to do?",
             }}
             suggestions={[
               {
-                title: "Generative UI",
-                message: "Get the weather in San Francisco.",
+                title: "Get latest activities",
+                message: "Update the activity queue with the latest activities.",
               },
               {
-                title: "Frontend Tools",
-                message: "Set the theme to green.",
+                title: "Adjust email sync",
+                message: "Change email sync hours to last 24 hours.",
               },
               {
-                title: "Human In the Loop",
-                message: "Please go to the moon.",
-              },
-              {
-                title: "Write Agent State",
-                message: "Add a proverb about AI.",
-              },
-              {
-                title: "Update Agent State",
-                message:
-                  "Please remove 1 random proverb from the list if there are any.",
-              },
-              {
-                title: "Read Agent State",
-                message: "What are the proverbs?",
+                title: "Check duplicated activities",
+                message: "Check for duplicated activities in the activity queue with the contacts and tasks in the CRM.",
               },
             ]}
           >

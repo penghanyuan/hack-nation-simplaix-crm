@@ -7,6 +7,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PeopleTable } from "@/components/people-table"
 import { toast } from "sonner"
 import type { Contact } from "@/db/schema"
+import { useCopilotReadable } from "@copilotkit/react-core"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -22,6 +23,11 @@ export default function PeoplePage() {
       revalidateOnFocus: true,
     }
   )
+
+  useCopilotReadable({
+    description: "The current contacts in the CRM",
+    value: contacts,
+  })
 
   useEffect(() => {
     // Check for OAuth callback messages

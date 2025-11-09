@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
+import { useCopilotReadable } from "@copilotkit/react-core"
+import { useEmailSyncHoursTool } from "@/hooks/use-activity-queue-tool"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -63,6 +65,12 @@ export function EmailSyncHoursSelector() {
   }
 
   const currentValue = settingsData?.emailSyncHours?.toString() || "12"
+
+  useCopilotReadable({
+    description: "The current email sync hours",
+    value: currentValue,
+  });
+  useEmailSyncHoursTool(mutate)
 
   return (
     <div className="space-y-2">

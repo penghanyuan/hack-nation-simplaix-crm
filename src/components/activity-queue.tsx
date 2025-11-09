@@ -17,6 +17,8 @@ import type { Activity, ActivityType } from "@/lib/types"
 import type { Activity as DBActivity } from "@/db/schema"
 import { RefreshCw, Check, X } from "lucide-react"
 import { toast } from "sonner"
+import { useActivityQueueStore } from "@/stores/activity-queue-store"
+import { useCopilotReadable } from "@copilotkit/react-core"
 
 // Fetcher function for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -40,8 +42,21 @@ function formatTimestamp(date: Date): string {
 }
 
 export function ActivityQueue() {
-  const [isUpdating, setIsUpdating] = useState(false)
   const [statusText, setStatusText] = useState<string>("")
+  
+  // Use Zustand store for update state
+  const { isUpdating: storeIsUpdating, setIsUpdating: setStoreIsUpdating } = useActivityQueueStore()
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [hasTriggered, setHasTriggered] = useState(false)
+
+  // Sync local state with store state
+  useEffect(() => {
+    if (storeIsUpdating && !isUpdating && !hasTriggered) {
+      // Trigger update when store state changes
+      setHasTriggered(true)
+      handleUpdate().finally(() => setHasTriggered(false))
+    }
+  }, [storeIsUpdating, isUpdating, hasTriggered])
 
   // Use SWR for data fetching
   const { data: rawActivities, isLoading, mutate } = useSWR<Activity[]>(
@@ -71,8 +86,13 @@ export function ActivityQueue() {
   })) || []
   
 
+  useCopilotReadable({
+    description: "The current activities in the activity queue, these activites might be added to the CRM as contacts or tasks",
+    value: activities,
+  })
   async function handleUpdate() {
     setIsUpdating(true)
+    setStoreIsUpdating(true)
     setStatusText("Starting sync...")
 
     // Start polling more frequently during analysis
@@ -200,7 +220,7 @@ export function ActivityQueue() {
       const emailAnalysisData = emailAnalysisResult?.results
       const transcriptAnalysisData = transcriptAnalysisResult?.results
 
-      let description = []
+      const description = []
 
       if (emailSyncSuccess && emailAnalysisData) {
         description.push(
@@ -235,6 +255,7 @@ export function ActivityQueue() {
       // Stop frequent polling
       clearInterval(pollInterval)
       setIsUpdating(false)
+      setStoreIsUpdating(false)
       // Clear status text after a delay
       setTimeout(() => setStatusText(""), 2000)
     }
