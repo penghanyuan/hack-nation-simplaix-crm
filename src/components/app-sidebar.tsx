@@ -85,7 +85,7 @@ export function AppSidebar() {
           <SidebarGroup>
             <SidebarGroupLabel className="text-xs text-neutral-500">Settings</SidebarGroupLabel>
             <SidebarGroupContent className="px-2 space-y-2">
-              <EmailSyncHoursSelector />
+              {/* <EmailSyncHoursSelector /> */}
             </SidebarGroupContent>
           </SidebarGroup>
         ) : null}
