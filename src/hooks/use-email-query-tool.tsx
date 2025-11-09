@@ -2,6 +2,24 @@
 
 import { useFrontendTool } from "@copilotkit/react-core"
 
+type EmailQueryParams = {
+  startDate?: string
+  endDate?: string
+  status?: string
+  limit?: number
+}
+
+type QueriedEmail = {
+  id: string
+  subject: string
+  fromName?: string | null
+  fromEmail: string
+  toEmail?: string | null
+  receivedAt: string
+  status: string
+  body: string
+}
+
 /**
  * Frontend tool that allows the AI agent to query emails by time range
  * This enables the agent to retrieve and analyze email data from specific periods
@@ -36,7 +54,7 @@ export function useEmailQueryTool() {
         required: false,
       },
     ],
-    handler: async ({ startDate, endDate, status, limit }) => {
+    handler: async ({ startDate, endDate, status, limit }: EmailQueryParams) => {
       try {
         // Validate date formats if provided
         if (startDate) {
@@ -89,7 +107,7 @@ export function useEmailQueryTool() {
             end: endDate || 'current time',
           },
           statusFilter: status || 'all',
-          emails: data.emails.map((email: any) => ({
+          emails: data.emails.map((email: QueriedEmail) => ({
             id: email.id,
             subject: email.subject,
             from: `${email.fromName || 'Unknown'} <${email.fromEmail}>`,
@@ -107,4 +125,3 @@ export function useEmailQueryTool() {
     },
   })
 }
-

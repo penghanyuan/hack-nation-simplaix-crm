@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getActivityById, markActivityStatus } from '@/services/activityService';
 import { createContact, getContactByEmail, updateContact } from '@/services/contactService';
 import { createTask } from '@/services/taskService';
+import type { ContactActivityPayload, TaskActivityPayload } from '@/lib/activity-payloads';
 
 /**
  * PATCH /api/activities/[id]/accept
@@ -35,29 +36,16 @@ export async function PATCH(
 
     // Handle contact activity
     if (activity.entityType === 'contact') {
-      const contactData = activity.extractedData as {
-        name: string;
-        email: string;
-        companyName?: string;
-        title?: string;
-        phone?: string;
-        linkedin?: string;
-        x?: string;
-        action?: 'create' | 'update';
-        existingContactId?: string;
-        changes?: Array<{
-          field: string;
-          oldValue: string | null | undefined;
-          newValue: string | null | undefined;
-        }>;
-      };
+      const contactData = activity.extractedData as ContactActivityPayload;
+      const {
+        action: contactAction = 'create',
+        existingContactId,
+        changes,
+        ...contactFields
+      } = contactData;
 
-      // Check if this is an update or create action
-      if (contactData.action === 'update' && contactData.existingContactId) {
-        // This is a contact update - update the existing contact
-        const { existingContactId, changes, action, ...updateFields } = contactData;
-        
-        insertedRecord = await updateContact(existingContactId, updateFields);
+      if (contactAction === 'update' && existingContactId) {
+        insertedRecord = await updateContact(existingContactId, contactFields);
 
         await markActivityStatus(id, 'accepted');
 
@@ -68,40 +56,26 @@ export async function PATCH(
           record: insertedRecord,
           changes: changes || [],
         });
-      } else {
-        // This is a new contact - create it
-        const { action, existingContactId, changes, ...newContactData } = contactData;
-
-        // Check if contact already exists (double-check)
-        const existingContact = await getContactByEmail(newContactData.email);
-
-        if (existingContact) {
-          // Contact already exists, just mark activity as accepted
-          await markActivityStatus(id, 'accepted');
-
-          return NextResponse.json({
-            success: true,
-            message: 'Contact already exists',
-            action: 'already_exists',
-            record: existingContact,
-          });
-        }
-
-        // Insert new contact
-        insertedRecord = await createContact(newContactData);
       }
+
+      const existingContact = await getContactByEmail(contactFields.email);
+
+      if (existingContact) {
+        await markActivityStatus(id, 'accepted');
+
+        return NextResponse.json({
+          success: true,
+          message: 'Contact already exists',
+          action: 'already_exists',
+          record: existingContact,
+        });
+      }
+
+      insertedRecord = await createContact(contactFields);
     }
     // Handle task activity
     else if (activity.entityType === 'task') {
-      const taskData = activity.extractedData as {
-        title: string;
-        description?: string;
-        companyName?: string;
-        contactEmails: string[];
-        status: 'todo' | 'in_progress' | 'done';
-        priority: 'low' | 'medium' | 'high' | 'urgent';
-        dueDate?: string;
-      };
+      const taskData = activity.extractedData as TaskActivityPayload;
 
       // Insert new task
       insertedRecord = await createTask({
@@ -120,10 +94,14 @@ export async function PATCH(
     // Mark activity as accepted
     await markActivityStatus(id, 'accepted');
 
+    const extractedAction = (
+      activity.extractedData as Partial<{ action?: 'create' | 'update' }>
+    )?.action ?? 'create';
+
     return NextResponse.json({
       success: true,
-      message: `${activity.entityType} accepted and ${(activity.extractedData as any)?.action === 'update' ? 'updated' : 'created'}`,
-      action: (activity.extractedData as any)?.action || 'create',
+      message: `${activity.entityType} accepted and ${extractedAction === 'update' ? 'updated' : 'created'}`,
+      action: extractedAction,
       record: insertedRecord,
     });
   } catch (error) {

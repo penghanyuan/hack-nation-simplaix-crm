@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { Task as TaskRecord } from '@/db/schema';
 import { deleteTask, getTaskById, updateTask } from '@/services/taskService';
 
 /**
@@ -61,17 +62,12 @@ export async function PATCH(
     } = body;
 
     // Build update object with only provided fields
-    const updateData: Partial<{
-      title: string;
-      description: string | null;
-      companyName: string | null;
-      contactEmails: string[] | null;
-      status: string;
-      priority: string | null;
-      dueDate: Date | null;
-      completedAt: Date | null;
-      updatedAt: Date;
-    }> = {
+    type UpdatableTaskFields = Pick<
+      TaskRecord,
+      'title' | 'description' | 'companyName' | 'contactEmails' | 'status' | 'priority' | 'dueDate' | 'completedAt' | 'updatedAt'
+    >;
+
+    const updateData: Partial<UpdatableTaskFields> = {
       updatedAt: new Date(),
     };
 
@@ -80,6 +76,13 @@ export async function PATCH(
     if (companyName !== undefined) updateData.companyName = companyName;
     if (contactEmails !== undefined) updateData.contactEmails = contactEmails;
     if (status !== undefined) {
+      const allowedStatuses: TaskRecord['status'][] = ['todo', 'in_progress', 'done'];
+      if (!allowedStatuses.includes(status)) {
+        return NextResponse.json(
+          { error: 'Invalid status value' },
+          { status: 400 }
+        );
+      }
       updateData.status = status;
       // Auto-set completedAt when status changes to done
       if (status === 'done' && !completedAt) {
@@ -88,7 +91,20 @@ export async function PATCH(
         updateData.completedAt = null;
       }
     }
-    if (priority !== undefined) updateData.priority = priority;
+    if (priority !== undefined) {
+      if (priority === null) {
+        updateData.priority = null;
+      } else {
+        const allowedPriorities: Exclude<TaskRecord['priority'], null>[] = ['low', 'medium', 'high', 'urgent'];
+        if (!allowedPriorities.includes(priority)) {
+          return NextResponse.json(
+            { error: 'Invalid priority value' },
+            { status: 400 }
+          );
+        }
+        updateData.priority = priority;
+      }
+    }
     if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
     if (completedAt !== undefined) updateData.completedAt = completedAt ? new Date(completedAt) : null;
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useMemo, useCallback } from "react"
 import useSWR, { mutate as globalMutate } from "swr"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
@@ -22,6 +22,7 @@ import { useActivityQueueStore } from "@/stores/activity-queue-store"
 import { useActivityActionsStore } from "@/stores/activity-actions-store"
 import { useCopilotReadable } from "@copilotkit/react-core"
 import { useEmailNotifications } from "@/hooks/use-email-notifications"
+import type { ContactActivityPayload, TaskActivityPayload } from "@/lib/activity-payloads"
 
 // Fetcher function for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -30,6 +31,25 @@ const activityTypeConfig: Record<ActivityType, { bg: string; text: string }> = {
   email: { bg: "bg-sky-50", text: "text-sky-600" },
   meeting: { bg: "bg-purple-50", text: "text-purple-600" },
   linkedin: { bg: "bg-indigo-50", text: "text-indigo-600" }
+}
+
+function isContactActivityPayload(data: unknown): data is ContactActivityPayload {
+  return Boolean(
+    data &&
+      typeof data === 'object' &&
+      'email' in data &&
+      typeof (data as { email: unknown }).email === 'string' &&
+      'name' in data
+  )
+}
+
+function isTaskActivityPayload(data: unknown): data is TaskActivityPayload {
+  return Boolean(
+    data &&
+      typeof data === 'object' &&
+      'title' in data &&
+      typeof (data as { title: unknown }).title === 'string'
+  )
 }
 
 function formatTimestamp(date: Date): string {
@@ -59,15 +79,6 @@ export function ActivityQueue() {
   // Auto-approve mode state
   const [isAutoApproving, setIsAutoApproving] = useState(false)
   const hasAutoApprovedRef = useRef(false)
-
-  // Sync local state with store state
-  useEffect(() => {
-    if (storeIsUpdating && !isUpdating && !hasTriggered) {
-      // Trigger update when store state changes
-      setHasTriggered(true)
-      handleUpdate().finally(() => setHasTriggered(false))
-    }
-  }, [storeIsUpdating, isUpdating, hasTriggered])
 
   // Use SWR for data fetching
   const { data: rawActivities, isLoading, mutate } = useSWR<Activity[]>(
@@ -102,10 +113,12 @@ export function ActivityQueue() {
   const autoApproveMode = autoApproveData?.autoApproveMode ?? false
 
   // Convert timestamp strings to Date objects
-  const activities = rawActivities?.map(activity => ({
-    ...activity,
-    timestamp: new Date(activity.timestamp)
-  })) || []
+  const activities = useMemo(() => (
+    rawActivities?.map(activity => ({
+      ...activity,
+      timestamp: new Date(activity.timestamp)
+    })) || []
+  ), [rawActivities])
   
   // Subscribe to activity actions from the store
   const { pendingAction, clearPendingAction } = useActivityActionsStore()
@@ -245,7 +258,7 @@ export function ActivityQueue() {
     }
   }
 
-  async function handleUpdate() {
+  const handleUpdate = useCallback(async () => {
     setIsUpdating(true)
     setStoreIsUpdating(true)
     setStatusText("Starting sync...")
@@ -426,7 +439,15 @@ export function ActivityQueue() {
       // Clear status text after a delay
       setTimeout(() => setStatusText(""), 2000)
     }
-  }
+  }, [mutate, mutateSyncTime, setStoreIsUpdating])
+
+  // Sync local state with store-triggered updates
+  useEffect(() => {
+    if (storeIsUpdating && !isUpdating && !hasTriggered) {
+      setHasTriggered(true)
+      handleUpdate().finally(() => setHasTriggered(false))
+    }
+  }, [storeIsUpdating, isUpdating, hasTriggered, handleUpdate])
 
   return (
     <div className="flex border-t border-neutral-200 bg-neutral-50 shadow-md shrink-0 w-full overflow-hidden">
@@ -504,7 +525,7 @@ function ActivityCard({
   onActivityProcessed,
 }: {
   activity: Activity
-  onActivityProcessed: () => Promise<any>
+  onActivityProcessed: () => Promise<Activity[] | undefined>
 }) {
   const config = activityTypeConfig[activity.type]
   const [isProcessing, setIsProcessing] = useState(false)
@@ -755,11 +776,11 @@ function ActivityCard({
           {fullActivityData && (
             <div className="mt-4">
               <h4 className="font-semibold mb-2 text-sm">Extracted Information:</h4>
-              {entityType === 'contact' && (
-                <ContactDetails data={fullActivityData.extractedData as any} />
+              {entityType === 'contact' && isContactActivityPayload(fullActivityData.extractedData) && (
+                <ContactDetails data={fullActivityData.extractedData} />
               )}
-              {entityType === 'task' && (
-                <TaskDetails data={fullActivityData.extractedData as any} />
+              {entityType === 'task' && isTaskActivityPayload(fullActivityData.extractedData) && (
+                <TaskDetails data={fullActivityData.extractedData} />
               )}
             </div>
           )}
@@ -806,7 +827,7 @@ function ActivityCard({
 }
 
 // Helper component to display contact details
-function ContactDetails({ data }: { data: any }) {
+function ContactDetails({ data }: { data: ContactActivityPayload }) {
   const isUpdate = data.action === 'update';
   const hasChanges = isUpdate && data.changes && data.changes.length > 0;
 
@@ -817,11 +838,11 @@ function ContactDetails({ data }: { data: any }) {
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <h5 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
             <span className="text-lg">📝</span>
-            Changes Detected ({data.changes.length})
+            Changes Detected ({data.changes?.length ?? 0})
           </h5>
           <div className="space-y-2">
-            {data.changes.map((change: any, idx: number) => (
-              <div key={idx} className="text-xs bg-white p-2 rounded border border-amber-100">
+            {data.changes?.map((change, idx) => (
+              <div key={`${change.field}-${idx}`} className="text-xs bg-white p-2 rounded border border-amber-100">
                 <span className="font-medium capitalize">{change.field}:</span>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-neutral-500 line-through">
@@ -890,7 +911,7 @@ function ContactDetails({ data }: { data: any }) {
 }
 
 // Helper component to display task details
-function TaskDetails({ data }: { data: any }) {
+function TaskDetails({ data }: { data: TaskActivityPayload }) {
   return (
     <div className="space-y-2 text-sm">
       <div className="grid grid-cols-2 gap-2">
@@ -940,4 +961,3 @@ function TaskDetails({ data }: { data: any }) {
     </div>
   )
 }
-

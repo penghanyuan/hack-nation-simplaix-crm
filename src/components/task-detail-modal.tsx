@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -54,19 +54,15 @@ interface TaskDetailModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+
 export function TaskDetailModal({ task, contacts, open, onOpenChange }: TaskDetailModalProps) {
   const [copied, setCopied] = useState(false);
   const [taskResult, setTaskResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [creatingDraft, setCreatingDraft] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      fetchTaskResult();
-    }
-  }, [open, task.id]);
-
-  const fetchTaskResult = async () => {
+  const fetchTaskResult = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`/api/tasks/${task.id}/result`);
@@ -81,7 +77,13 @@ export function TaskDetailModal({ task, contacts, open, onOpenChange }: TaskDeta
     } finally {
       setLoading(false);
     }
-  };
+  }, [task.id]);
+
+  useEffect(() => {
+    if (open) {
+      void fetchTaskResult();
+    }
+  }, [open, fetchTaskResult]);
 
   const handleCopy = async () => {
     if (!taskResult?.emailBody) return;
@@ -96,6 +98,7 @@ ${taskResult.emailBody}`;
       toast.success('Email content copied to clipboard');
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
+      console.error('Failed to copy email content:', error);
       toast.error('Failed to copy to clipboard');
     }
   };
@@ -172,7 +175,7 @@ ${taskResult.emailBody}`;
     }
   };
 
-  const getPriorityColor = (priority: string | null) => {
+  const getPriorityColor = (priority: string | null): BadgeVariant => {
     switch (priority) {
       case 'urgent':
         return 'destructive';
@@ -213,7 +216,7 @@ ${taskResult.emailBody}`;
                 {getStatusLabel(task.status)}
               </Badge>
               {task.priority && (
-                <Badge className="text-sm" variant={getPriorityColor(task.priority) as any}>
+                <Badge className="text-sm" variant={getPriorityColor(task.priority)}>
                   {task.priority}
                 </Badge>
               )}
@@ -415,4 +418,3 @@ ${taskResult.emailBody}`;
     </Dialog>
   );
 }
-

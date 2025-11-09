@@ -5,6 +5,8 @@ import { createContact, getContactByEmail, updateContact } from '@/services/cont
 import { createTask } from '@/services/taskService';
 import { getTranscriptById, updateTranscript } from '@/services/transcriptService';
 import { downloadBlobFile } from '@/lib/vercel-blob';
+import type { Activity } from '@/db/schema';
+import type { ContactActivityPayload, TaskActivityPayload } from '@/lib/activity-payloads';
 
 /**
  * POST /api/transcripts/analyze
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
       hasSummary: !!analysis.meetingSummary,
     });
 
-    const createdActivities = [];
+    const createdActivities: Activity[] = [];
 
     // Create activity for each extracted contact (new contacts)
     for (const contactData of analysis.contacts) {
@@ -145,32 +147,40 @@ export async function POST(request: NextRequest) {
 
       // Process contact activities
       for (const activity of createdActivities.filter(a => a.entityType === 'contact')) {
-        const contactData = activity.extractedData as any;
+        const contactData = activity.extractedData as ContactActivityPayload;
+        const {
+          action: contactAction = 'create',
+          existingContactId,
+          ...contactFields
+        } = contactData;
 
-        if (activity.action === 'update' && contactData.existingContactId) {
-          const { existingContactId, changes, action, ...updateFields } = contactData;
-          await updateContact(existingContactId, updateFields);
-          console.log(`✅ Updated contact: ${contactData.name}`);
+        if (contactAction === 'update' && existingContactId) {
+          await updateContact(existingContactId, contactFields);
+          console.log(`✅ Updated contact: ${contactFields.name}`);
         } else {
-          const { action, existingContactId, changes, ...newContactFields } = contactData;
-          
-          // Check if contact already exists
-          const existingContact = await getContactByEmail(newContactFields.email);
+          const existingContact = await getContactByEmail(contactFields.email);
           if (!existingContact) {
-            await createContact(newContactFields);
-            console.log(`✅ Created contact: ${newContactFields.name}`);
+            await createContact(contactFields);
+            console.log(`✅ Created contact: ${contactFields.name}`);
           } else {
-            console.log(`ℹ️ Contact already exists: ${newContactFields.name}`);
+            console.log(`ℹ️ Contact already exists: ${contactFields.name}`);
           }
         }
 
         await markActivityStatus(activity.id, 'accepted');
       }
 
-      // Process task activities
       for (const activity of createdActivities.filter(a => a.entityType === 'task')) {
-        const taskData = activity.extractedData as any;
-        await createTask(taskData);
+        const taskData = activity.extractedData as TaskActivityPayload;
+        await createTask({
+          title: taskData.title,
+          description: taskData.description || undefined,
+          companyName: taskData.companyName,
+          contactEmails: taskData.contactEmails,
+          status: taskData.status || 'todo',
+          priority: taskData.priority || 'medium',
+          dueDate: taskData.dueDate ? new Date(taskData.dueDate) : undefined,
+        });
         await markActivityStatus(activity.id, 'accepted');
         console.log(`✅ Created task: ${taskData.title}`);
       }
@@ -218,4 +228,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

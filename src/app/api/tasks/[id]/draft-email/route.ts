@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { tasks, taskResults, contacts } from '@/db/schema';
+import { tasks, taskResults, contacts, type Task } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const p = await params
@@ -119,7 +119,7 @@ Contact Information:
 
 async function generateEmailDraft(
   resultId: string,
-  task: any,
+  task: Task,
   contactInfo: string
 ) {
   try {
@@ -151,7 +151,7 @@ Subject: [Your subject here]
       model: openai('gpt-4o-mini'),
       prompt,
       temperature: 0.7,
-      maxTokens: 1000,
+      maxOutputTokens: 1000,
     });
 
     const emailContent = result.text.trim();
@@ -191,4 +191,3 @@ Subject: [Your subject here]
       .where(eq(taskResults.id, resultId));
   }
 }
-

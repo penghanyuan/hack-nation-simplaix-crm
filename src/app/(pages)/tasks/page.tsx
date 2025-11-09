@@ -4,7 +4,6 @@ import useSWR from "swr"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { KanbanBoard } from "@/components/kanban-board"
 import { toast } from "sonner"
-import { useCopilotReadable } from "@copilotkit/react-core"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
@@ -37,10 +36,6 @@ export default function TasksPage() {
   const tasks = data?.tasks || []
   const loading = isLoading
 
-  // useCopilotReadable({
-  //   description: "The current tasks in the CRM. These tasks are organized into a Kanban board, where you can move tasks between columns based on their status.",
-  //   value: tasks,
-  // })
   const handleTaskUpdate = async (taskId: string, newStatus: string) => {
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
@@ -111,4 +106,3 @@ export default function TasksPage() {
     </div>
   )
 }
-

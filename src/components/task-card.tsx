@@ -44,6 +44,8 @@ interface TaskCardProps {
   onDelete?: (taskId: string) => Promise<void>;
 }
 
+type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+
 export function TaskCard({ task, onDelete }: TaskCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -91,7 +93,7 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
           const data = await response.json();
           setHasResult(data.success && data.result?.status === 'completed');
         }
-      } catch (error) {
+      } catch {
         // No result found, that's okay
       }
     }
@@ -126,7 +128,7 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
     }
   };
 
-  const getPriorityColor = (priority: string | null) => {
+  const getPriorityColor = (priority: string | null): BadgeVariant => {
     switch (priority) {
       case 'urgent':
         return 'destructive';
@@ -159,11 +161,6 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
       default:
         return 'To Do';
     }
-  };
-
-  const truncateText = (text: string, maxLength: number) => {
-    if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + '...';
   };
 
   const formatDueDate = (dueDate: string) => {
@@ -223,7 +220,7 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
                   {task.priority && (
                     <Badge
                       className="text-xs"
-                      variant={getPriorityColor(task.priority) as any}
+                      variant={getPriorityColor(task.priority)}
                     >
                       {task.priority}
                     </Badge>
@@ -252,7 +249,7 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
               <div className="flex items-center gap-2">
                 <User className="h-3.5 w-3.5 text-neutral-400" />
                 <div className="flex flex-wrap gap-1.5 items-center">
-                  {contacts.slice(0, 2).map((contact, idx) => (
+                  {contacts.slice(0, 2).map((contact) => (
                     <Link 
                       key={contact.id}
                       href={`/people?email=${encodeURIComponent(contact.email)}`}
@@ -351,4 +348,3 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
     </>
   );
 }
-

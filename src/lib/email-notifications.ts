@@ -49,7 +49,6 @@ class EmailNotificationManager {
 
 // Create global singleton that persists across Next.js isolates
 declare global {
-  // eslint-disable-next-line no-var
   var __emailNotifications: EmailNotificationManager | undefined;
 }
 
@@ -62,4 +61,3 @@ if (!global.__emailNotifications) {
 }
 
 export const emailNotifications = global.__emailNotifications;
-

@@ -2,7 +2,7 @@ import { tool } from 'ai';
 import { z } from 'zod';
 import { db } from '@/db';
 import { tasks } from '@/db/schema';
-import { sql, and, eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 /**
  * Task lookup result type
@@ -168,4 +168,3 @@ Tasks are considered duplicates if they have the same title, description, compan
     return result;
   },
 });
-

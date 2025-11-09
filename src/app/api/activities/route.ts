@@ -65,6 +65,7 @@ export async function GET() {
         description,
         timestamp: activity.createdAt,
         entityType: activity.entityType as 'contact' | 'task',
+        status: activity.status,
       }
     })
 
