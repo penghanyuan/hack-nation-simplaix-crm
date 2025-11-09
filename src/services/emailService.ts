@@ -124,3 +124,40 @@ export async function insertGmailEmails(gmailEmails: Array<{
 
   return { inserted, skipped };
 }
+
+/**
+ * Query emails by time range with optional filters
+ */
+export async function queryEmailsByTimeRange(params: {
+  startDate?: Date;
+  endDate?: Date;
+  status?: 'pending' | 'processing' | 'processed' | 'error';
+  limit?: number;
+}): Promise<Email[]> {
+  const { startDate, endDate, status, limit = 100 } = params;
+  
+  const { and, gte, lte } = await import('drizzle-orm');
+  
+  const conditions = [];
+  
+  if (startDate) {
+    conditions.push(gte(emails.receivedAt, startDate));
+  }
+  
+  if (endDate) {
+    conditions.push(lte(emails.receivedAt, endDate));
+  }
+  
+  if (status) {
+    conditions.push(eq(emails.status, status));
+  }
+  
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  
+  return db
+    .select()
+    .from(emails)
+    .where(whereClause)
+    .orderBy(desc(emails.receivedAt))
+    .limit(limit);
+}

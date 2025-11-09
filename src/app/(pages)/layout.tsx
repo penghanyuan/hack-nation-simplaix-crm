@@ -8,6 +8,7 @@ import { useActivityQueueTool } from "@/hooks/use-activity-queue-tool";
 import { useActivityActionsTool } from "@/hooks/use-activity-actions-tool";
 import { useNavigationTool } from "@/hooks/use-navigation-tool";
 import { useTasksData } from "@/hooks/use-tasks-data";
+import { useEmailQueryTool } from "@/hooks/use-email-query-tool";
 
 export default function DashboardLayout({
   children,
@@ -18,6 +19,7 @@ export default function DashboardLayout({
   useActivityQueueTool();
   useActivityActionsTool();
   useNavigationTool();
+  useEmailQueryTool();
   
   // Make tasks data available to the AI
   useTasksData();
@@ -36,7 +38,7 @@ export default function DashboardLayout({
           <CopilotSidebar
             clickOutsideToClose={false}
             defaultOpen={false}
-            instructions="You are a helpful CRM assistant. You can help users manage their contacts, tasks, and activities. You have access to: 1) All tasks in the system - you can answer questions about task status, priorities, deadlines, and provide summaries, 2) Tools to update the activity queue to sync new emails and transcripts, 3) Tools to accept or reject specific activities from the queue, 4) Tools to manage email sync settings, 5) Tools to navigate between pages. When accepting or rejecting activities, you need to use the activity ID from the queue."
+            instructions="You are a helpful CRM assistant. You can help users manage their contacts, tasks, and activities. You have access to: 1) All tasks in the system - you can answer questions about task status, priorities, deadlines, and provide summaries, 2) Tools to update the activity queue to sync new emails and transcripts, 3) Tools to accept or reject specific activities from the queue, 4) Tools to manage email sync settings, 5) Tools to navigate between pages, 6) Tools to query emails by time range with filters for status and limits. When accepting or rejecting activities, you need to use the activity ID from the queue."
             labels={{
               title: "CRM Assistant",
               initial: "👋 Hi! I can help you manage your CRM. I can update activities, sync emails, and more. What would you like to do?",
@@ -57,7 +59,11 @@ export default function DashboardLayout({
               {
                 title: "High priority tasks",
               message: "What tasks do I have with high priority?",
-              }
+              },
+              {
+                title: "Query emails by subject",
+                message: "Show me all conversations with CTOs in the last 6 hours",
+              },
             ]}
           >
             {children}
