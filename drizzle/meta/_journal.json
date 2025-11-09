@@ -1,0 +1,76 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1762626110607,
+      "tag": "0000_faithful_ozymandias",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1762626241357,
+      "tag": "0001_acoustic_quasimodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1762641299243,
+      "tag": "0002_flat_speedball",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1762642376662,
+      "tag": "0003_futuristic_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1762642492374,
+      "tag": "0004_safe_silverclaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1762644012359,
+      "tag": "0005_steep_green_goblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762647888997,
+      "tag": "0006_absurd_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762654990289,
+      "tag": "0007_robust_black_queen",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1762656878657,
+      "tag": "0008_boring_black_bolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1762661826099,
+      "tag": "0009_secret_warpath",
+      "breakpoints": true
+    }
+  ]
+}

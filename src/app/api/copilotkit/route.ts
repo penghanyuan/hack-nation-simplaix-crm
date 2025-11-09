@@ -1,22 +1,18 @@
 import {
   CopilotRuntime,
-  ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
+  AnthropicAdapter
 } from "@copilotkit/runtime";
-import { HttpAgent } from "@ag-ui/client";
 import { NextRequest } from "next/server";
  
-// 1. You can use any service adapter here for multi-agent support. We use
-//    the empty adapter since we're only using one agent.
-const serviceAdapter = new ExperimentalEmptyAdapter();
+// 1. Create the Anthropic adapter with proper configuration
+const serviceAdapter = new AnthropicAdapter({
+  model: "claude-sonnet-4-20250514",
+});
  
-// 2. Create the CopilotRuntime instance and utilize the PydanticAI AG-UI
-//    integration to setup the connection.
+// 2. Create the CopilotRuntime instance
 const runtime = new CopilotRuntime({
-  agents: {
-    // Our FastAPI endpoint URL
-    "my_agent": new HttpAgent({url: "http://localhost:8000/"}),
-  }   
+  // Add any backend actions here if needed
 });
  
 // 3. Build a Next.js API route that handles the CopilotKit runtime requests.

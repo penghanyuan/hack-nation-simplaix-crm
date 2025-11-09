@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { CopilotKit } from "@copilotkit/react-core";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
 
@@ -15,11 +16,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={"antialiased"}>
-        <CopilotKit runtimeUrl="/api/copilotkit" agent="my_agent">
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased bg-white text-neutral-900" suppressHydrationWarning>
+        <CopilotKit runtimeUrl="/api/copilotkit">
           {children}
         </CopilotKit>
+        <Toaster />
       </body>
     </html>
   );
