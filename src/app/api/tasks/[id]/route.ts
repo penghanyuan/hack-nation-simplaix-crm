@@ -101,6 +101,19 @@ export async function PATCH(
       );
     }
 
+    // Trigger email drafting if task moved to in_progress with 'auto' and 'email' tags
+    if (status === 'in_progress' && updatedTask.tags) {
+      const taskTags = Array.isArray(updatedTask.tags) ? updatedTask.tags : [];
+      if (taskTags.includes('auto') && taskTags.includes('email')) {
+        // Trigger email drafting asynchronously (don't await)
+        fetch(`${request.nextUrl.origin}/api/tasks/${id}/draft-email`, {
+          method: 'POST',
+        }).catch(error => {
+          console.error('Error triggering email draft:', error);
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       task: updatedTask,

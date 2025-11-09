@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { GripVertical, Trash2, Calendar, User, Tag } from 'lucide-react';
 import Link from 'next/link';
+import { TaskDetailModal } from './task-detail-modal';
 
 interface Contact {
   id: string;
@@ -47,6 +48,8 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [hasResult, setHasResult] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const {
     attributes,
@@ -78,6 +81,30 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
 
     fetchContacts();
   }, [task.contactEmails]);
+
+  // Check if task has a completed result
+  useEffect(() => {
+    async function checkForResult() {
+      try {
+        const response = await fetch(`/api/tasks/${task.id}/result`);
+        if (response.ok) {
+          const data = await response.json();
+          setHasResult(data.success && data.result?.status === 'completed');
+        }
+      } catch (error) {
+        // No result found, that's okay
+      }
+    }
+
+    checkForResult();
+    
+    // Poll for result updates when task is in progress with email tag
+    const taskTags = task.tags && Array.isArray(task.tags) ? task.tags : [];
+    if (task.status === 'in_progress' && taskTags.includes('email')) {
+      const interval = setInterval(checkForResult, 5000); // Check every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [task.id, task.status, task.tags]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -163,10 +190,26 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
 
   return (
     <>
-      <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="mb-3">
-        <Card className="hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
-          <CardHeader className="pb-3 space-y-0">
-            <div className="flex items-start justify-between gap-2">
+      <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
+        <Card 
+          className="hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing relative"
+          onClick={(e) => {
+            // Only open modal if clicking on the card itself, not child buttons
+            if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.card-clickable')) {
+              e.stopPropagation();
+              setShowDetailModal(true);
+            }
+          }}
+        >
+          {/* Red dot indicator */}
+          {hasResult && (
+            <div className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full ring-2 ring-white shadow-lg z-10" 
+                 title="Email draft ready"
+            />
+          )}
+          
+          <CardHeader className="pb-3 space-y-0 card-clickable">
+            <div className="flex items-start justify-between gap-2" {...listeners}>
               <div className="flex-1 space-y-2">
                 <CardTitle className="text-base font-semibold leading-tight line-clamp-2">
                   {task.title}
@@ -196,7 +239,7 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
             </div>
           </CardHeader>
           
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-3 card-clickable">
             {/* Description */}
             {task.description && (
               <p className="text-sm text-neutral-600 line-clamp-2">
@@ -298,6 +341,13 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+
+    <TaskDetailModal
+      task={task}
+      contacts={contacts}
+      open={showDetailModal}
+      onOpenChange={setShowDetailModal}
+    />
     </>
   );
 }

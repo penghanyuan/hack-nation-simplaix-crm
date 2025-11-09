@@ -32,6 +32,7 @@ export function createOAuth2Client(): OAuth2Client {
 export function getAuthUrl(oauth2Client: OAuth2Client): string {
   const scopes = [
     'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.compose',
     'https://www.googleapis.com/auth/userinfo.email',
   ];
 
@@ -384,5 +385,55 @@ export async function fetchEmailsSinceHistory(
     console.error('Error fetching history:', error);
     return [];
   }
+}
+
+/**
+ * Create a Gmail draft
+ */
+export async function createGmailDraft(
+  oauth2Client: OAuth2Client,
+  to: string[],
+  subject: string,
+  body: string,
+  cc?: string[]
+): Promise<{ id: string; message: { id: string } }> {
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+  // Create the email message in RFC 2822 format
+  const messageParts = [
+    `To: ${to.join(', ')}`,
+    cc && cc.length > 0 ? `Cc: ${cc.join(', ')}` : '',
+    'Content-Type: text/plain; charset=utf-8',
+    'MIME-Version: 1.0',
+    `Subject: ${subject}`,
+    '',
+    body,
+  ].filter(Boolean);
+
+  const message = messageParts.join('\n');
+  
+  // Encode the message in base64url format
+  const encodedMessage = Buffer.from(message)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+  // Create the draft
+  const response = await gmail.users.drafts.create({
+    userId: 'me',
+    requestBody: {
+      message: {
+        raw: encodedMessage,
+      },
+    },
+  });
+
+  return {
+    id: response.data.id || '',
+    message: {
+      id: response.data.message?.id || '',
+    },
+  };
 }
 
