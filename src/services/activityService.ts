@@ -5,6 +5,7 @@ import { desc, eq } from 'drizzle-orm';
 export type ActivitySeed = {
   entityType: 'contact' | 'task';
   action?: 'create' | 'update';
+  sourceType?: 'email' | 'meeting' | 'linkedin';
   extractedData: Record<string, unknown>;
   sourceEmailSubject?: string | null;
   sourceEmailFrom?: string | null;
@@ -28,6 +29,7 @@ export async function createPendingActivity(seed: ActivitySeed): Promise<Activit
       entityType: seed.entityType,
       action: seed.action || 'create',
       status: 'pending',
+      sourceType: seed.sourceType || 'email',
       extractedData: seed.extractedData,
       sourceEmailSubject: seed.sourceEmailSubject,
       sourceEmailFrom: seed.sourceEmailFrom,

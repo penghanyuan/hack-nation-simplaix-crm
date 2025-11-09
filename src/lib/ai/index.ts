@@ -17,6 +17,13 @@ export {
   analyzeEmailWithTools,
 } from './email-analyzer-with-tools';
 
+// Transcript analyzer
+export {
+  analyzeTranscriptWithTools,
+  type TranscriptData,
+  type TranscriptAnalysisResult,
+} from './transcript-analyzer';
+
 // AI Tools
 export {
   contactLookupTool,

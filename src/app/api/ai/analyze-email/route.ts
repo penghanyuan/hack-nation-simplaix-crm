@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Analyze the email (multi-step agent extracts both contacts and tasks)
-    const analysis = await analyzeEmailWithTools(email as EmailData, { model: 'gpt-5-mini-2025-08-07' });
+    const analysis = await analyzeEmailWithTools(email as EmailData);
 
     // Save all extracted data as pending activities
     const createdActivities = [];

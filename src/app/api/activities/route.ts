@@ -59,7 +59,8 @@ export async function GET() {
 
       return {
         id: activity.id,
-        type: 'email' as const,
+        type: activity.sourceType,
+        sourceType: activity.sourceType,
         title,
         description,
         timestamp: activity.createdAt,

@@ -105,8 +105,8 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
 
   return (
     <>
-      <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
-        <Card className="hover:shadow-md transition-shadow cursor-move">
+      <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="mb-3">
+        <Card className="hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing">
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
@@ -117,7 +117,7 @@ export function TaskCard({ task, onDelete }: TaskCardProps) {
                   {getStatusLabel(task.status)}
                 </Badge>
               </div>
-              <div {...listeners} className="cursor-grab active:cursor-grabbing">
+              <div className="cursor-grab active:cursor-grabbing">
                 <GripVertical className="h-4 w-4 text-neutral-400" />
               </div>
             </div>

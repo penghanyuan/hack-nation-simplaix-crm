@@ -24,10 +24,8 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 const activityTypeConfig: Record<ActivityType, { bg: string; text: string }> = {
   email: { bg: "bg-sky-50", text: "text-sky-600" },
-  linkedin: { bg: "bg-indigo-50", text: "text-indigo-600" },
-  zoom: { bg: "bg-emerald-50", text: "text-emerald-600" },
-  calendar: { bg: "bg-amber-50", text: "text-amber-600" },
-  slack: { bg: "bg-rose-50", text: "text-rose-600" }
+  meeting: { bg: "bg-purple-50", text: "text-purple-600" },
+  linkedin: { bg: "bg-indigo-50", text: "text-indigo-600" }
 }
 
 function formatTimestamp(date: Date): string {
@@ -76,22 +74,104 @@ export function ActivityQueue() {
   async function handleUpdate() {
     setIsUpdating(true)
 
+    // Start polling more frequently during analysis
+    const pollInterval = setInterval(() => {
+      mutate() // Refresh activities every 3 seconds during analysis
+    }, 3000)
+
     try {
-      const result = await updateLatestEmail({
-        onComplete: async () => {
-          await mutate() // Revalidate activities cache
+      // Step 1: Run email update and transcript sync in parallel
+      const [emailResult, transcriptSyncResult] = await Promise.allSettled([
+        // Email update
+        updateLatestEmail({
+          onComplete: async () => {
+            await mutate() // Revalidate activities cache
 
-          // Update lastActivitySync timestamp in database
-          await fetch('/api/settings/activity-sync', { method: 'POST' })
-          await mutateSyncTime() // Revalidate sync time cache
-        },
-      })
+            // Update lastActivitySync timestamp in database
+            await fetch('/api/settings/activity-sync', { method: 'POST' })
+            await mutateSyncTime() // Revalidate sync time cache
+          },
+        }),
+        // Transcript sync (without analyzing)
+        fetch('/api/transcripts/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ analyze: false, autoInsert: false }),
+        }).then(async (response) => {
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Failed to sync transcripts')
+          }
+          const data = await response.json()
+          console.log('📄 Transcript sync complete:', data)
+          return data
+        })
+      ])
 
-      toast.success("Activity updated successfully")
+      // Check sync results
+      const emailSuccess = emailResult.status === 'fulfilled'
+      const transcriptSyncSuccess = transcriptSyncResult.status === 'fulfilled'
+
+      // Step 2: Analyze pending transcripts (after sync completes)
+      let transcriptAnalysisResult = null
+      if (transcriptSyncSuccess) {
+        try {
+          console.log('🤖 Starting analysis of pending transcripts...')
+          const analyzeResponse = await fetch('/api/transcripts/analyze-pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+
+          if (analyzeResponse.ok) {
+            transcriptAnalysisResult = await analyzeResponse.json()
+            console.log('✅ Transcript analysis complete:', transcriptAnalysisResult)
+            
+            // Revalidate activities cache to show new activities
+            await mutate()
+          } else {
+            const error = await analyzeResponse.json()
+            console.error('❌ Failed to analyze transcripts:', error)
+          }
+        } catch (error) {
+          console.error('❌ Error analyzing pending transcripts:', error)
+        }
+      }
+
+      // Final revalidation after all operations
+      await mutate()
+
+      // Show appropriate toast based on results
+      if (emailSuccess && transcriptSyncSuccess && transcriptAnalysisResult) {
+        const syncData = transcriptSyncResult.value
+        const analysisData = transcriptAnalysisResult.results
+        toast.success("Update complete", {
+          description: `Email analyzed. Transcripts: ${syncData.results.created} synced, ${analysisData.processed} analyzed, ${analysisData.activities} activities created.`,
+          duration: 5000,
+        })
+      } else if (emailSuccess && transcriptSyncSuccess) {
+        const syncData = transcriptSyncResult.value
+        toast.success("Update complete", {
+          description: `Email analyzed. Transcripts: ${syncData.results.created} synced. No pending transcripts to analyze.`,
+          duration: 5000,
+        })
+      } else if (emailSuccess) {
+        toast.success("Email updated successfully", {
+          description: "Transcript sync failed",
+        })
+      } else if (transcriptSyncSuccess) {
+        const syncData = transcriptSyncResult.value
+        toast.success("Transcripts synced", {
+          description: `${syncData.results.created} synced. Email update failed.`,
+        })
+      } else {
+        throw new Error('Both email and transcript updates failed')
+      }
     } catch (error) {
       console.error('Error during update:', error)
       toast.error(`Failed to update: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
+      // Stop frequent polling
+      clearInterval(pollInterval)
       setIsUpdating(false)
     }
   }

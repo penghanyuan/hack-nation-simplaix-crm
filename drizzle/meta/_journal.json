@@ -50,6 +50,13 @@
       "when": 1762647888997,
       "tag": "0006_absurd_quasar",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1762654990289,
+      "tag": "0007_robust_black_queen",
+      "breakpoints": true
     }
   ]
 }

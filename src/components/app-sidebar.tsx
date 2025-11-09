@@ -75,7 +75,7 @@ export function AppSidebar() {
         {state === "expanded" ? (
           <SidebarGroup>
             <SidebarGroupLabel className="text-xs text-neutral-500">Integrations</SidebarGroupLabel>
-            <SidebarGroupContent className="px-2">
+            <SidebarGroupContent className="px-2 space-y-2">
               <GmailConnectButton />
             </SidebarGroupContent>
           </SidebarGroup>

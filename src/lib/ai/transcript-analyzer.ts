@@ -1,16 +1,66 @@
 import { generateText, Output, stepCountIs } from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
+
 import { z } from 'zod';
 import { contactLookupTool } from './tools/contact-lookup';
 import { taskLookupTool } from './tools/task-lookup';
-import type { EmailData, EmailAnalysisResult } from './email-analyzer';
+
+/**
+ * Transcript data structure
+ */
+export interface TranscriptData {
+  content: string;
+  filename?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Result of transcript analysis
+ */
+export interface TranscriptAnalysisResult {
+  contacts: Array<{
+    name: string;
+    email: string;
+    companyName?: string;
+    title?: string;
+    phone?: string;
+    linkedin?: string;
+    x?: string;
+  }>;
+  contactUpdates?: Array<{
+    existingContactId: string;
+    name: string;
+    email: string;
+    companyName?: string;
+    title?: string;
+    phone?: string;
+    linkedin?: string;
+    x?: string;
+    changes: Array<{
+      field: string;
+      oldValue: string | null | undefined;
+      newValue: string | null | undefined;
+    }>;
+  }>;
+  tasks: Array<{
+    title: string;
+    description?: string;
+    companyName?: string;
+    contactEmails: string[];
+    status: 'todo' | 'in_progress' | 'done';
+    priority: 'low' | 'medium' | 'high' | 'urgent';
+    dueDate?: string;
+  }>;
+  meetingSummary?: string;
+  keyPoints?: string[];
+}
 
 /**
  * Schema for contact information
  */
 const contactInfoSchema = z.object({
   name: z.string().describe('Full name of the contact person'),
-  email: z.string().describe('Email address of the contact - use empty string if not found'),
+  email: z.string().describe('Email address of the contact'),
   companyName: z.string().nullable().describe('Company name if mentioned'),
   title: z.string().nullable().describe('Job title or position if mentioned'),
   phone: z.string().nullable().describe('Phone number if mentioned'),
@@ -51,79 +101,69 @@ const taskInfoSchema = z.object({
 });
 
 /**
- * Multi-step analysis schema - extracts contacts, contact updates, and tasks
+ * Multi-step analysis schema for transcripts
  */
-const emailAnalysisSchema = z.object({
-  contacts: z.array(contactInfoSchema).describe('Array of NEW contacts found in the email that do not already exist in the database'),
+const transcriptAnalysisSchema = z.object({
+  contacts: z.array(contactInfoSchema).describe('Array of NEW contacts found in the transcript that do not already exist in the database'),
   contactUpdates: z.array(contactUpdateSchema).describe('Array of EXISTING contacts with updated information (use data from contactLookup tool)').optional(),
-  tasks: z.array(taskInfoSchema).describe('Array of tasks found in the email (can be empty if none found)').optional(),
+  tasks: z.array(taskInfoSchema).describe('Array of NEW tasks/action items found in the transcript').optional(),
+  meetingSummary: z.string().describe('Brief summary of the meeting/conversation').optional(),
+  keyPoints: z.array(z.string()).describe('Key points or decisions from the meeting').optional(),
 });
 
 /**
- * Enhanced email analyzer that uses AI tools to check for existing contacts
- * This prevents duplicate contact creation by querying the database before extraction
+ * Analyze a meeting transcript to extract contacts, tasks, and meeting insights
+ * Uses AI tools to check for existing contacts and tasks to prevent duplicates
  * 
- * @param emailData - The email data to analyze
+ * @param transcriptData - The transcript data to analyze
  * @param options - Optional configuration
- * @returns Object containing arrays of new contacts and tasks
- * 
- * @example
- * ```typescript
- * const email = {
- *   subject: "Meeting Request with John",
- *   body: "Hi, I'm John Doe from Acme Corp. Let's schedule a product demo next week...",
- *   from: { email: "john@example.com", name: "John Doe" }
- * };
- * 
- * const result = await analyzeEmailWithTools(email);
- * // result.contacts will only contain contacts that don't exist in the database
- * // result.tasks will contain all extracted tasks
- * ```
+ * @returns Object containing contacts, tasks, and meeting insights
  */
-export async function analyzeEmailWithTools(
-  emailData: EmailData,
+export async function analyzeTranscriptWithTools(
+  transcriptData: TranscriptData,
   options?: {
     apiKey?: string;
     model?: string;
     maxSteps?: number;
   }
-): Promise<EmailAnalysisResult> {
+): Promise<TranscriptAnalysisResult> {
   const model = options?.model || 'gpt-5';
-  const maxSteps = options?.maxSteps || 20;
-  
-  // Create the OpenAI client with optional API key
-  const openaiClient = options?.apiKey 
+  const maxSteps = options?.maxSteps || 50; // Generous steps for complex transcript analysis with tools
+
+  const openaiClient = options?.apiKey
     ? createOpenAI({ apiKey: options.apiKey })
     : openai;
 
-  const systemPrompt = `You are an intelligent CRM email analyzer that extracts contacts, detects updates, and finds tasks while avoiding duplicates.
+  const systemPrompt = `You are an intelligent CRM meeting transcript analyzer that extracts contacts, detects updates, finds action items, and summarizes meetings while avoiding duplicates.
+
 Don't generate tasks or contacts that are not related to client management.
 IMPORTANT: Before extracting any contact or task, you MUST use the lookup tools to check if they already exist in the database.
 
 WORKFLOW:
-1. Read the email and identify all potential contacts (sender, recipients, people mentioned)
+1. Read the transcript and identify all participants and mentioned people
 2. For EACH potential contact, call the contactLookup tool with ALL available information:
-   - Always include: email, name, companyName, title
+   - Always include: email (if available), name, companyName, title
    - Also include if found: phone, linkedin, x (Twitter/X)
 3. Based on contactLookup response:
    - If found: false → Add to "contacts" array (new contact)
    - If found: true AND hasChanges: true → Add to "contactUpdates" array with the changes
    - If found: true AND hasChanges: false → Skip (no changes needed)
-4. Identify all potential tasks (action items, meetings, follow-ups, to-dos)
+4. Identify all action items, follow-ups, and tasks mentioned in the meeting
 5. For EACH potential task, call the taskLookup tool with task information:
    - Always include: title (required)
    - Also include if available: description, companyName, contactEmails
 6. Based on taskLookup response:
    - If found: false → Add to "tasks" array (new task)
    - If found: true → Skip (task already exists, no duplicates)
-7. Return the final structured output
+7. Generate a meeting summary and extract key points/decisions
+8. Return the final structured output
 
 CONTACT EXTRACTION RULES (NEW CONTACTS):
-- Use contactLookup tool for EVERY potential contact
+- Use contactLookup tool for EVERY potential contact mentioned
 - Only include in "contacts" array if contactLookup returns found: false
-- Extract ALL available fields:
-  * name: Full name
-  * email: Email address (must contain @)
+- Extract ALL available fields from the transcript:
+  * name: Full name of the person
+  * email: Email address if mentioned (if not available, try to infer or skip)
   * companyName: Company name if mentioned (nullable)
   * title: Job title or position if mentioned (nullable)
   * phone: Phone number if mentioned (nullable)
@@ -138,51 +178,59 @@ CONTACT UPDATE RULES (EXISTING CONTACTS WITH CHANGES):
   * changes: Copy the "changes" array from contactLookup result
 - This helps track what information has been updated
 
-TASK EXTRACTION RULES (AVOIDING DUPLICATES):
-- Use taskLookup tool for EVERY potential task
+TASK EXTRACTION RULES (ACTION ITEMS):
+- Use taskLookup tool for EVERY potential task/action item
 - Only include in "tasks" array if taskLookup returns found: false
+- Look for:
+  * Action items assigned to specific people
+  * Follow-up tasks mentioned
+  * Deliverables with deadlines
+  * Next steps agreed upon
 - For each NEW task, extract:
-  * title: Brief summary of the task (REQUIRED)
-  * description: Detailed description (nullable)
+  * title: Brief summary of the action item (REQUIRED)
+  * description: Detailed description from the conversation (nullable)
   * companyName: Related company if mentioned (nullable)
-  * contactEmails: Array of email addresses involved (nullable)
-  * status: 'todo' (default), 'in_progress', or 'done'
-  * priority: 'low', 'medium' (default), 'high', or 'urgent'
-  * dueDate: ISO 8601 format if mentioned (nullable)
-- Tasks are considered duplicates if they have the same title, description, company, and contact emails
+  * contactEmails: Emails of people responsible or involved (nullable)
+  * status: Usually 'todo' for new tasks from meetings
+  * priority: Infer from urgency mentioned in the transcript
+  * dueDate: Extract if specific deadline mentioned (ISO 8601 format)
 - DO NOT include tasks where taskLookup returns found: true
+
+MEETING INSIGHTS:
+- meetingSummary: Create a concise 2-3 sentence summary of the meeting
+- keyPoints: Extract 3-7 key decisions, insights, or important discussion points
 
 IMPORTANT NOTES:
 - ALWAYS call contactLookup for each contact with ALL available information
-- ALWAYS call taskLookup for each task with ALL available information (title, description, company, emails)
-- The tools detect duplicates automatically - only include items where found: false
-- Return empty arrays if no new contacts, no updates, or no new tasks found
-- Consider synonyms and variations of all the fields (name, companyName, title, phone, linkedin, x, task description,task title, etc.).
-- Be thorough - check each contact and task individually with their respective lookup tools`;
+- ALWAYS call taskLookup for each task with ALL available information
+- Consider synonyms and variations of all the fields
+- If email is not explicitly mentioned for a contact, try to infer from context or skip that contact
+- Be thorough - check each contact and task individually with their respective lookup tools
+- Focus on business-relevant information and actionable items`;
 
-  const userPrompt = `Analyze this email and extract NEW contacts (that don't exist in DB) and NEW tasks (that don't exist in DB):
+  const userPrompt = `Analyze this meeting transcript and extract NEW contacts, NEW tasks, and meeting insights:
 
-Subject: ${emailData.subject}
-From: ${emailData.from.name || 'Unknown'} <${emailData.from.email}>
-${emailData.date ? `Date: ${emailData.date}` : ''}
-
-Body:
-${emailData.body}
+${transcriptData.filename ? `Filename: ${transcriptData.filename}\n` : ''}
+Transcript:
+${transcriptData.content}
 
 STEPS:
-1. Use contactLookup tool to check each potential contact
+1. Use contactLookup tool to check each participant/mentioned person
 2. Only extract contacts NOT found in the database (or with changes)
-3. Use taskLookup tool to check each potential task
+3. Use taskLookup tool to check each action item/task
 4. Only extract tasks NOT found in the database
+5. Summarize the meeting and extract key points
 
 Return a structured output with:
 - contacts: array of NEW contacts only (not found in database)
 - contactUpdates: array of existing contacts with changes (optional)
-- tasks: array of NEW tasks only (not found in database)`;
+- tasks: array of NEW action items/tasks (not found in database)
+- meetingSummary: brief summary of the meeting
+- keyPoints: key decisions or discussion points`;
 
   try {
-    console.log('🔍 Starting email analysis with contact lookup...');
-    
+    console.log('🔍 Starting transcript analysis...');
+
     const result = await generateText({
       model: openaiClient(model),
       prompt: userPrompt,
@@ -191,17 +239,18 @@ Return a structured output with:
         contactLookup: contactLookupTool,
         taskLookup: taskLookupTool,
       },
-      stopWhen: stepCountIs(maxSteps), // Allow multiple tool calls to check each contact and task
+      stopWhen: stepCountIs(maxSteps),
       experimental_output: Output.object({
-        schema: emailAnalysisSchema,
+        schema: transcriptAnalysisSchema,
       }),
     });
 
     const rawResult = result.experimental_output;
-    console.log('✅ Analysis complete:', {
+    console.log('✅ Transcript analysis complete:', {
       contactsFound: rawResult.contacts?.length || 0,
       contactUpdatesFound: rawResult.contactUpdates?.length || 0,
       tasksFound: rawResult.tasks?.length || 0,
+      keyPointsFound: rawResult.keyPoints?.length || 0,
       stepsUsed: result.steps.length,
     });
 
@@ -209,7 +258,7 @@ Return a structured output with:
     const toolCalls = result.steps.flatMap(step => step.toolCalls);
     console.log(`🔧 Tool calls made: ${toolCalls.length}`);
 
-    // Clean up the result - remove null values and filter valid emails
+    // Clean up contacts - filter valid emails
     const validContacts = (rawResult.contacts || [])
       .filter(contact => {
         const isValidEmail = contact.email && contact.email.includes('@');
@@ -242,7 +291,7 @@ Return a structured output with:
         changes: update.changes,
       }));
 
-    const cleanedResult: EmailAnalysisResult = {
+    const cleanedResult: TranscriptAnalysisResult = {
       contacts: validContacts,
       contactUpdates: validContactUpdates.length > 0 ? validContactUpdates : undefined,
       tasks: rawResult.tasks?.map(task => ({
@@ -254,17 +303,21 @@ Return a structured output with:
         priority: task.priority,
         dueDate: task.dueDate || undefined,
       })) || [],
+      meetingSummary: rawResult.meetingSummary || undefined,
+      keyPoints: rawResult.keyPoints || undefined,
     };
 
-    console.log('🧹 Final result:', {
+    console.log('🧹 Final transcript result:', {
       newContacts: cleanedResult.contacts.length,
       contactUpdates: cleanedResult.contactUpdates?.length || 0,
       tasks: cleanedResult.tasks.length,
+      hasSummary: !!cleanedResult.meetingSummary,
+      keyPointsCount: cleanedResult.keyPoints?.length || 0,
     });
 
     return cleanedResult;
   } catch (error) {
-    console.error('⚠️ Error analyzing email with tools:', error);
+    console.error('⚠️ Error analyzing transcript with tools:', error);
     return {
       contacts: [],
       tasks: [],

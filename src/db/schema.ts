@@ -66,6 +66,19 @@ export const activityActionEnum = pgEnum('activity_action', [
   'update'
 ]);
 
+export const activitySourceTypeEnum = pgEnum('activity_source_type', [
+  'email',
+  'meeting',
+  'linkedin',
+]);
+
+export const transcriptStatusEnum = pgEnum('transcript_status', [
+  'pending',
+  'processing',
+  'processed',
+  'error'
+]);
+
 // Tables
 export const contacts = pgTable('contacts', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -157,6 +170,7 @@ export const activities = pgTable('activities', {
   entityType: activityEntityTypeEnum('entity_type').notNull(),
   action: activityActionEnum('action').default('create'),
   status: activityStatusEnum('status').default('pending').notNull(),
+  sourceType: activitySourceTypeEnum('source_type').default('email').notNull(),
   extractedData: jsonb('extracted_data').notNull(),
   sourceInteractionId: uuid('source_interaction_id').references(() => interactions.id),
   sourceEmailSubject: text('source_email_subject'),
@@ -164,6 +178,22 @@ export const activities = pgTable('activities', {
   sourceEmailDate: timestamp('source_email_date'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   processedAt: timestamp('processed_at'),
+});
+
+export const transcripts = pgTable('transcripts', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  blobUrl: text('blob_url').notNull().unique(),
+  pathname: text('pathname').notNull(),
+  filename: text('filename').notNull(),
+  size: integer('size').notNull(),
+  uploadedAt: timestamp('uploaded_at').notNull(),
+  contentType: text('content_type'),
+  status: transcriptStatusEnum('status').default('pending').notNull(),
+  content: text('content'),
+  metadata: jsonb('metadata'),
+  processedAt: timestamp('processed_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 // Types
@@ -190,4 +220,7 @@ export type NewUserSettings = typeof userSettings.$inferInsert;
 
 export type Activity = typeof activities.$inferSelect;
 export type NewActivity = typeof activities.$inferInsert;
+
+export type Transcript = typeof transcripts.$inferSelect;
+export type NewTranscript = typeof transcripts.$inferInsert;
 

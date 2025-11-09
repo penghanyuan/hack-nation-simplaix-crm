@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -190,7 +190,7 @@ export function KanbanBoard({ tasks, onTaskUpdate, onTaskDelete }: KanbanBoardPr
   }
 
   // Update items when tasks prop changes
-  useMemo(() => {
+  useEffect(() => {
     setItems(tasks);
   }, [tasks]);
 

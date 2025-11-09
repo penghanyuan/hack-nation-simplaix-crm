@@ -4,11 +4,14 @@ export type AgentState = {
 }
 
 // Activity Queue types
-export type ActivityType = "email" | "linkedin" | "zoom" | "calendar" | "slack"
+export type ActivityType = "email" | "meeting" | "linkedin"
+
+export type ActivitySourceType = "email" | "meeting" | "linkedin"
 
 export interface Activity {
   id: string
   type: ActivityType
+  sourceType?: ActivitySourceType
   title: string
   description: string
   timestamp: Date
