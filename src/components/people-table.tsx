@@ -32,6 +32,7 @@ import type { Contact } from "@/db/schema"
 interface PeopleTableProps {
   contacts: Contact[]
   isLoading?: boolean
+  highlightEmail?: string | null
 }
 
 interface EditingCell {
@@ -39,13 +40,14 @@ interface EditingCell {
   field: keyof Contact
 }
 
-export function PeopleTable({ contacts, isLoading }: PeopleTableProps) {
+export function PeopleTable({ contacts, isLoading, highlightEmail }: PeopleTableProps) {
   const [editingCell, setEditingCell] = React.useState<EditingCell | null>(null)
   const [editValue, setEditValue] = React.useState("")
   const [hoveredCell, setHoveredCell] = React.useState<EditingCell | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [contactToDelete, setContactToDelete] = React.useState<Contact | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const highlightedRowRef = React.useRef<HTMLTableRowElement>(null)
 
   React.useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -53,6 +55,16 @@ export function PeopleTable({ contacts, isLoading }: PeopleTableProps) {
       inputRef.current.select()
     }
   }, [editingCell])
+
+  // Scroll to highlighted contact
+  React.useEffect(() => {
+    if (highlightEmail && highlightedRowRef.current) {
+      highlightedRowRef.current.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'center' 
+      })
+    }
+  }, [highlightEmail, contacts])
 
   const handleCellClick = (contactId: string, field: keyof Contact, currentValue: string | null | undefined) => {
     setEditingCell({ contactId, field })
@@ -224,10 +236,15 @@ export function PeopleTable({ contacts, isLoading }: PeopleTableProps) {
             </TableRow>
           </TableHeader>
         <TableBody>
-          {contacts.map((contact) => (
+          {contacts.map((contact) => {
+            const isHighlighted = highlightEmail && contact.email === decodeURIComponent(highlightEmail)
+            return (
             <TableRow
               key={contact.id}
-              className="border-b border-neutral-100 hover:bg-neutral-50"
+              ref={isHighlighted ? highlightedRowRef : undefined}
+              className={`border-b border-neutral-100 hover:bg-neutral-50 transition-colors ${
+                isHighlighted ? 'bg-blue-50 ring-2 ring-blue-300 ring-inset' : ''
+              }`}
             >
               {/* Name */}
               <TableCell className="font-medium text-neutral-900 whitespace-nowrap text-xs sm:text-sm">
@@ -346,7 +363,7 @@ export function PeopleTable({ contacts, isLoading }: PeopleTableProps) {
                 </Button>
               </TableCell>
             </TableRow>
-          ))}
+          )})}
         </TableBody>
       </Table>
     </div>

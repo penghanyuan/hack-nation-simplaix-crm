@@ -13,6 +13,7 @@ const fetcher = (url: string) => fetch(url).then((res) => res.json())
 
 export default function PeoplePage() {
   const searchParams = useSearchParams()
+  const highlightEmail = searchParams.get('email')
 
   // Use SWR for contacts data
   const { data: contacts = [], isLoading } = useSWR<Contact[]>(
@@ -70,7 +71,7 @@ export default function PeoplePage() {
           </div>
         </div>
         <div className="flex-1 min-h-0">
-          <PeopleTable contacts={contacts} isLoading={isLoading} />
+          <PeopleTable contacts={contacts} isLoading={isLoading} highlightEmail={highlightEmail} />
         </div>
       </div>
     </div>

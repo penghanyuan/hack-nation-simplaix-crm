@@ -71,6 +71,13 @@
       "when": 1762661826099,
       "tag": "0009_secret_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1762667219917,
+      "tag": "0010_many_the_santerians",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ export interface TaskLookupResult {
     description?: string;
     companyName?: string;
     contactEmails: string[];
+    tags: string[];
     status: string;
     priority: string;
   };
@@ -97,6 +98,7 @@ export async function searchTask(params: {
                 description: task.description || undefined,
                 companyName: task.companyName || undefined,
                 contactEmails: task.contactEmails as string[],
+                tags: (task.tags as string[]) || ['auto'],
                 status: task.status,
                 priority: task.priority || 'medium',
               },
@@ -116,6 +118,7 @@ export async function searchTask(params: {
           description: task.description || undefined,
           companyName: task.companyName || undefined,
           contactEmails: (task.contactEmails as string[]) || [],
+          tags: (task.tags as string[]) || ['auto'],
           status: task.status,
           priority: task.priority || 'medium',
         },

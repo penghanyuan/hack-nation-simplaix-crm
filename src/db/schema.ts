@@ -130,6 +130,7 @@ export const tasks = pgTable('tasks', {
   description: text('description'),
   companyName: text('company_name'),
   contactEmails: jsonb('contact_emails').$type<string[]>(),
+  tags: jsonb('tags').$type<string[]>().default(['auto']),
   status: taskStatusEnum('status').default('todo').notNull(),
   priority: taskPriorityEnum('priority').default('medium'),
   dueDate: timestamp('due_date'),
