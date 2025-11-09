@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeEmail, type EmailData } from '@/lib/ai';
+import { analyzeEmailWithTools, type EmailData } from '@/lib/ai';
 import { createPendingActivity, markActivityStatus } from '@/services/activityService';
 import { createContact, getContactByEmail } from '@/services/contactService';
 import { createTask } from '@/services/taskService';
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Analyze the email (multi-step agent extracts both contacts and tasks)
-    const analysis = await analyzeEmail(email as EmailData, { model: 'gpt-5-mini-2025-08-07' });
+    const analysis = await analyzeEmailWithTools(email as EmailData, { model: 'gpt-5-mini-2025-08-07' });
 
     // Save all extracted data as pending activities
     const createdActivities = [];

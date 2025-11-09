@@ -1,10 +1,9 @@
 /**
- * AI utilities for email analysis and CRM data extraction
- * 
- * This module provides functions to analyze email content using OpenAI GPT models
- * and extract structured data for CRM operations.
+ * AI utilities for the CRM system
+ * Exports email analyzers and AI tools
  */
 
+// Email analyzers
 export {
   analyzeEmail,
   analyzeEmails,
@@ -14,3 +13,13 @@ export {
   type TaskEntry,
 } from './email-analyzer';
 
+export {
+  analyzeEmailWithTools,
+} from './email-analyzer-with-tools';
+
+// AI Tools
+export {
+  contactLookupTool,
+  searchContact,
+  type ContactLookupResult,
+} from './tools';
