@@ -22,12 +22,12 @@ export async function PATCH(
       );
     }
 
-    if (activity.status !== 'pending') {
-      return NextResponse.json(
-        { error: 'Activity is not pending' },
-        { status: 400 }
-      );
-    }
+    // if (activity.status !== 'pending') {
+    //   return NextResponse.json(
+    //     { error: 'Activity is not pending' },
+    //     { status: 400 }
+    //   );
+    // }
 
     // Mark activity as rejected
     await markActivityStatus(id, 'rejected');

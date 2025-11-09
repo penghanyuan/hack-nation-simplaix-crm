@@ -8,6 +8,8 @@ export type ActivityType = "email" | "meeting" | "linkedin"
 
 export type ActivitySourceType = "email" | "meeting" | "linkedin"
 
+export type ActivityStatus = "pending" | "accepted" | "rejected"
+
 export interface Activity {
   id: string
   type: ActivityType
@@ -16,4 +18,5 @@ export interface Activity {
   description: string
   timestamp: Date
   entityType: "contact" | "task"
+  status: ActivityStatus
 }

@@ -18,6 +18,7 @@ import type { Activity as DBActivity } from "@/db/schema"
 import { RefreshCw, Check, X } from "lucide-react"
 import { toast } from "sonner"
 import { useActivityQueueStore } from "@/stores/activity-queue-store"
+import { useActivityActionsStore } from "@/stores/activity-actions-store"
 import { useCopilotReadable } from "@copilotkit/react-core"
 
 // Fetcher function for SWR
@@ -85,6 +86,66 @@ export function ActivityQueue() {
     timestamp: new Date(activity.timestamp)
   })) || []
   
+  // Subscribe to activity actions from the store
+  const { pendingAction, clearPendingAction } = useActivityActionsStore()
+
+  // Handle activity actions from the store (triggered by AI tools)
+  useEffect(() => {
+    if (!pendingAction) return
+
+    const processAction = async () => {
+      try {
+        const endpoint = pendingAction.action === 'accept' 
+          ? `/api/activities/${pendingAction.activityId}/accept`
+          : `/api/activities/${pendingAction.activityId}/reject`
+
+        const response = await fetch(endpoint, {
+          method: 'PATCH',
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || `Failed to ${pendingAction.action} activity`)
+        }
+
+        const result = await response.json()
+        console.log(`Activity ${pendingAction.action}ed:`, result)
+
+        // Invalidate activities cache
+        await mutate()
+
+        // Also invalidate the contacts or tasks cache based on entity type
+        const activity = activities.find(a => a.id === pendingAction.activityId)
+        if (activity?.entityType === 'contact') {
+          await globalMutate('/api/contacts')
+          console.log('✅ Contacts cache invalidated')
+        } else if (activity?.entityType === 'task') {
+          await globalMutate('/api/tasks')
+          console.log('✅ Tasks cache invalidated')
+        }
+
+        toast.success(
+          `Activity ${pendingAction.action}ed successfully`,
+          { duration: 3000 }
+        )
+      } catch (error) {
+        console.error(`Error ${pendingAction.action}ing activity:`, error)
+        toast.error(
+          `Failed to ${pendingAction.action} activity`,
+          { 
+            description: error instanceof Error ? error.message : 'Unknown error',
+            duration: 5000 
+          }
+        )
+        // Revalidate on error
+        await mutate()
+      } finally {
+        clearPendingAction()
+      }
+    }
+
+    processAction()
+  }, [pendingAction, activities, mutate, clearPendingAction])
 
   useCopilotReadable({
     description: "The current activities in the activity queue, these activites might be added to the CRM as contacts or tasks",
