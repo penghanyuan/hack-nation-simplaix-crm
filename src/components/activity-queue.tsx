@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import useSWR, { mutate as globalMutate } from "swr"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import type { Activity, ActivityType } from "@/lib/types"
 import type { Activity as DBActivity } from "@/db/schema"
@@ -54,6 +55,10 @@ export function ActivityQueue() {
   const { isUpdating: storeIsUpdating, setIsUpdating: setStoreIsUpdating } = useActivityQueueStore()
   const [isUpdating, setIsUpdating] = useState(false)
   const [hasTriggered, setHasTriggered] = useState(false)
+  
+  // Auto-approve mode state
+  const [isAutoApproving, setIsAutoApproving] = useState(false)
+  const hasAutoApprovedRef = useRef(false)
 
   // Sync local state with store state
   useEffect(() => {
@@ -84,6 +89,17 @@ export function ActivityQueue() {
   )
 
   const lastSyncTime = syncData?.lastActivitySync ? new Date(syncData.lastActivitySync) : null
+
+  // Fetch auto-approve mode status
+  const { data: autoApproveData, mutate: mutateAutoApprove } = useSWR<{ autoApproveMode: boolean }>(
+    '/api/settings/auto-approve',
+    fetcher,
+    {
+      refreshInterval: 30000,
+    }
+  )
+
+  const autoApproveMode = autoApproveData?.autoApproveMode ?? false
 
   // Convert timestamp strings to Date objects
   const activities = rawActivities?.map(activity => ({
@@ -156,6 +172,79 @@ export function ActivityQueue() {
     description: "The current activities in the activity queue, these activites might be added to the CRM as contacts or tasks",
     value: activities,
   })
+
+  // Auto-approve all activities when mode is enabled and activities are loaded
+  useEffect(() => {
+    if (autoApproveMode && activities.length > 0 && !isAutoApproving && !hasAutoApprovedRef.current) {
+      hasAutoApprovedRef.current = true
+      setIsAutoApproving(true)
+      
+      const autoApproveAll = async () => {
+        console.log(`🤖 Auto-approve mode: Processing ${activities.length} activities`)
+        
+        try {
+          // Accept all activities in parallel
+          await Promise.all(
+            activities.map(activity => 
+              fetch(`/api/activities/${activity.id}/accept`, {
+                method: 'PATCH',
+              })
+            )
+          )
+
+          // Invalidate caches
+          await mutate()
+          await globalMutate('/api/contacts')
+          await globalMutate('/api/tasks')
+
+          toast.success(
+            `Auto-approved ${activities.length} activity(ies)`,
+            { duration: 3000 }
+          )
+        } catch (error) {
+          console.error('Error auto-approving activities:', error)
+          toast.error(
+            'Failed to auto-approve some activities',
+            { duration: 5000 }
+          )
+        } finally {
+          setIsAutoApproving(false)
+        }
+      }
+
+      autoApproveAll()
+    }
+
+    // Reset the flag when activities become empty
+    if (activities.length === 0) {
+      hasAutoApprovedRef.current = false
+    }
+  }, [autoApproveMode, activities, isAutoApproving, mutate])
+
+  // Handle auto-approve mode toggle
+  const handleAutoApproveModeToggle = async (checked: boolean) => {
+    try {
+      const response = await fetch('/api/settings/auto-approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: checked }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to update auto-approve mode')
+      }
+
+      await mutateAutoApprove()
+      toast.success(
+        checked ? 'Auto-approve mode enabled' : 'Auto-approve mode disabled',
+        { duration: 2000 }
+      )
+    } catch (error) {
+      console.error('Error updating auto-approve mode:', error)
+      toast.error('Failed to update auto-approve mode')
+    }
+  }
+
   async function handleUpdate() {
     setIsUpdating(true)
     setStoreIsUpdating(true)
@@ -357,19 +446,31 @@ export function ActivityQueue() {
               </p>
             ) : null}
           </div>
-          <Button
-            onClick={handleUpdate}
-            disabled={isUpdating}
-            size="sm"
-            variant="outline"
-            className="text-[10px] sm:text-xs whitespace-nowrap shrink-0 h-7 sm:h-8"
-          >
-            <RefreshCw className={cn(
-              "w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1",
-              isUpdating && "animate-spin"
-            )} />
-            {isUpdating ? "Updating..." : "Update"}
-          </Button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <Checkbox
+                checked={autoApproveMode}
+                onCheckedChange={handleAutoApproveModeToggle}
+                className="h-4 w-4"
+              />
+              <span className="text-[10px] sm:text-xs text-neutral-600 whitespace-nowrap">
+                Auto-approve
+              </span>
+            </label>
+            <Button
+              onClick={handleUpdate}
+              disabled={isUpdating}
+              size="sm"
+              variant="outline"
+              className="text-[10px] sm:text-xs whitespace-nowrap shrink-0 h-7 sm:h-8"
+            >
+              <RefreshCw className={cn(
+                "w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1",
+                isUpdating && "animate-spin"
+              )} />
+              {isUpdating ? "Updating..." : "Update"}
+            </Button>
+          </div>
         </div>
         <ScrollArea className="w-full">
           <div className="flex gap-2 sm:gap-3 pb-2">

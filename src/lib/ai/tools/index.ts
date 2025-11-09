@@ -9,3 +9,9 @@ export type { ContactLookupResult } from './contact-lookup';
 export { taskLookupTool, searchTask } from './task-lookup';
 export type { TaskLookupResult } from './task-lookup';
 
+export { contactListTool, getAllContacts } from './contact-list';
+export type { ContactListResult } from './contact-list';
+
+export { taskListTool, getAllTasks } from './task-list';
+export type { TaskListResult } from './task-list';
+

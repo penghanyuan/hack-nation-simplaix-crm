@@ -2,8 +2,8 @@ import { generateText, Output, stepCountIs } from 'ai';
 import { openai, createOpenAI } from '@ai-sdk/openai';
 
 import { z } from 'zod';
-import { contactLookupTool } from './tools/contact-lookup';
-import { taskLookupTool } from './tools/task-lookup';
+import { contactListTool } from './tools/contact-list';
+import { taskListTool } from './tools/task-list';
 
 /**
  * Transcript data structure
@@ -137,30 +137,30 @@ export async function analyzeTranscriptWithTools(
   const systemPrompt = `You are an intelligent CRM meeting transcript analyzer that extracts contacts, detects updates, finds action items, and summarizes meetings while avoiding duplicates.
 
 Don't generate tasks or contacts that are not related to client management.
-IMPORTANT: Before extracting any contact or task, you MUST use the lookup tools to check if they already exist in the database.
+IMPORTANT: You MUST retrieve the full contact and task lists first, then compare extracted items to avoid duplicates.
 
 WORKFLOW:
-1. Read the transcript and identify all participants and mentioned people
-2. For EACH potential contact, call the contactLookup tool with ALL available information:
-   - Always include: email (if available), name, companyName, title
-   - Also include if found: phone, linkedin, x (Twitter/X)
-3. Based on contactLookup response:
-   - If found: false → Add to "contacts" array (new contact)
-   - If found: true AND hasChanges: true → Add to "contactUpdates" array with the changes
-   - If found: true AND hasChanges: false → Skip (no changes needed)
-4. Identify all action items, follow-ups, and tasks mentioned in the meeting
-5. For EACH potential task, call the taskLookup tool with task information:
-   - Always include: title (required)
-   - Also include if available: description, companyName, contactEmails
-6. Based on taskLookup response:
-   - If found: false → Add to "tasks" array (new task)
-   - If found: true → Skip (task already exists, no duplicates)
+1. FIRST: Call contactList tool to get ALL existing contacts from the database
+2. SECOND: Call taskList tool to get ALL existing tasks from the database
+3. Read the transcript and identify all participants and mentioned people
+4. For EACH potential contact, compare against the contact list retrieved in step 1:
+   - Check for matches by email (most reliable), name, or combination of name + company
+   - Use case-insensitive comparison and consider variations
+   - If NO match found → Add to "contacts" array (new contact)
+   - If match found with DIFFERENT information → Add to "contactUpdates" array with changes
+   - If exact match found → Skip (no action needed)
+5. Identify all action items, follow-ups, and tasks mentioned in the meeting
+6. For EACH potential task, compare against the task list retrieved in step 2:
+   - Check for matches by title similarity, or title + company + contact emails
+   - Use case-insensitive comparison and consider semantic similarity
+   - If NO match found → Add to "tasks" array (new task)
+   - If match found → Skip (task already exists, avoid duplicates)
 7. Generate a meeting summary and extract key points/decisions
 8. Return the final structured output
 
 CONTACT EXTRACTION RULES (NEW CONTACTS):
-- Use contactLookup tool for EVERY potential contact mentioned
-- Only include in "contacts" array if contactLookup returns found: false
+- Compare each potential contact against the full contact list from contactList tool
+- Only include in "contacts" array if NO matching contact exists in database
 - Extract ALL available fields from the transcript:
   * name: Full name of the person
   * email: Email address if mentioned (if not available, try to infer or skip)
@@ -171,16 +171,20 @@ CONTACT EXTRACTION RULES (NEW CONTACTS):
   * x: Twitter/X handle if mentioned (nullable)
 
 CONTACT UPDATE RULES (EXISTING CONTACTS WITH CHANGES):
-- Include in "contactUpdates" array if contactLookup returns found: true AND hasChanges: true
-- Extract ALL fields that changed (from contactLookup response):
-  * existingContactId: Use the "id" from contactLookup result
+- Compare each potential contact against the full contact list from contactList tool
+- Include in "contactUpdates" array if a matching contact exists but has different information
+- Matching logic: same email OR (same name AND same company)
+- Extract ALL fields and note what changed:
+  * existingContactId: Use the "id" from the matching contact in the list
   * name, email, companyName, title, phone, linkedin, x: Include all fields
-  * changes: Copy the "changes" array from contactLookup result
+  * changes: Array of objects showing field, oldValue, newValue for each changed field
 - This helps track what information has been updated
 
 TASK EXTRACTION RULES (ACTION ITEMS):
-- Use taskLookup tool for EVERY potential task/action item
-- Only include in "tasks" array if taskLookup returns found: false
+- Compare each potential task against the full task list from taskList tool
+- Only include in "tasks" array if NO matching task exists in database
+- Matching logic: same or very similar title, OR (same title + same company) OR (same title + same contact emails)
+- Consider semantic similarity: "Schedule demo" vs "Book product demonstration" could be duplicates
 - Look for:
   * Action items assigned to specific people
   * Follow-up tasks mentioned
@@ -194,18 +198,18 @@ TASK EXTRACTION RULES (ACTION ITEMS):
   * status: Usually 'todo' for new tasks from meetings
   * priority: Infer from urgency mentioned in the transcript
   * dueDate: Extract if specific deadline mentioned (ISO 8601 format)
-- DO NOT include tasks where taskLookup returns found: true
 
 MEETING INSIGHTS:
 - meetingSummary: Create a concise 2-3 sentence summary of the meeting
 - keyPoints: Extract 3-7 key decisions, insights, or important discussion points
 
 IMPORTANT NOTES:
-- ALWAYS call contactLookup for each contact with ALL available information
-- ALWAYS call taskLookup for each task with ALL available information
-- Consider synonyms and variations of all the fields
+- ALWAYS call contactList and taskList tools FIRST before doing any extraction
+- YOU are responsible for comparing and detecting duplicates, not the tools
+- Be thorough and intelligent about duplicate detection - consider variations and synonyms
 - If email is not explicitly mentioned for a contact, try to infer from context or skip that contact
-- Be thorough - check each contact and task individually with their respective lookup tools
+- Consider semantic similarity, not just exact string matches
+- Be conservative: when in doubt, treat as a duplicate rather than creating duplicates
 - Focus on business-relevant information and actionable items`;
 
   const userPrompt = `Analyze this meeting transcript and extract NEW contacts, NEW tasks, and meeting insights:
@@ -215,16 +219,18 @@ Transcript:
 ${transcriptData.content}
 
 STEPS:
-1. Use contactLookup tool to check each participant/mentioned person
-2. Only extract contacts NOT found in the database (or with changes)
-3. Use taskLookup tool to check each action item/task
-4. Only extract tasks NOT found in the database
-5. Summarize the meeting and extract key points
+1. FIRST: Call contactList tool to get all existing contacts
+2. SECOND: Call taskList tool to get all existing tasks
+3. Extract all potential contacts from the transcript
+4. Compare each extracted contact against the contact list - only include if no duplicate exists
+5. Extract all potential action items/tasks from the transcript
+6. Compare each extracted task against the task list - only include if no duplicate exists
+7. Summarize the meeting and extract key points
 
 Return a structured output with:
-- contacts: array of NEW contacts only (not found in database)
-- contactUpdates: array of existing contacts with changes (optional)
-- tasks: array of NEW action items/tasks (not found in database)
+- contacts: array of NEW contacts only (not duplicates of existing contacts in database)
+- contactUpdates: array of existing contacts with updated information (optional)
+- tasks: array of NEW action items/tasks (not duplicates of existing tasks in database)
 - meetingSummary: brief summary of the meeting
 - keyPoints: key decisions or discussion points`;
 
@@ -236,8 +242,8 @@ Return a structured output with:
       prompt: userPrompt,
       system: systemPrompt,
       tools: {
-        contactLookup: contactLookupTool,
-        taskLookup: taskLookupTool,
+        contactList: contactListTool,
+        taskList: taskListTool,
       },
       stopWhen: stepCountIs(maxSteps),
       experimental_output: Output.object({

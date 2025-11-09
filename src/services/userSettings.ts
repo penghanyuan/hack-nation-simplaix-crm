@@ -101,3 +101,9 @@ export async function updateGmailHistoryId(userId: string, historyId: string) {
     gmailHistoryId: historyId,
   });
 }
+
+export async function updateAutoApproveMode(userId: string, enabled: boolean) {
+  return upsertUserSettings(userId, {
+    autoApproveMode: enabled,
+  });
+}

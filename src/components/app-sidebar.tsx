@@ -29,11 +29,6 @@ const navigation = [
     icon: CheckSquare,
     href: "/tasks",
   },
-  {
-    title: "Test Email",
-    icon: TestTube2,
-    href: "/test-email",
-  },
 ]
 
 export function AppSidebar() {
