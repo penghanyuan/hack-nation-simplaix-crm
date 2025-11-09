@@ -64,6 +64,13 @@
       "when": 1762656878657,
       "tag": "0008_boring_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1762661826099,
+      "tag": "0009_secret_warpath",
+      "breakpoints": true
     }
   ]
 }

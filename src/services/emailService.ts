@@ -83,3 +83,44 @@ export async function getPendingEmails(): Promise<Email[]> {
     .where(eq(emails.status, 'pending'))
     .orderBy(desc(emails.receivedAt));
 }
+
+/**
+ * Insert emails from Gmail, skipping duplicates
+ */
+export async function insertGmailEmails(gmailEmails: Array<{
+  gmailId: string;
+  subject: string;
+  body: string;
+  fromEmail: string;
+  fromName?: string;
+  toEmail?: string;
+  receivedAt: Date;
+}>): Promise<{ inserted: number; skipped: number }> {
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const email of gmailEmails) {
+    // Check if email already exists
+    const existing = await getEmailByGmailId(email.gmailId);
+    if (existing) {
+      skipped++;
+      continue;
+    }
+
+    // Insert new email
+    await createEmail({
+      gmailId: email.gmailId,
+      subject: email.subject,
+      body: email.body,
+      fromEmail: email.fromEmail,
+      fromName: email.fromName,
+      toEmail: email.toEmail,
+      receivedAt: email.receivedAt,
+      status: 'pending',
+    });
+
+    inserted++;
+  }
+
+  return { inserted, skipped };
+}

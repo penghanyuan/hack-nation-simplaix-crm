@@ -16,7 +16,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:push": "drizzle-kit push",
-    "db:seed": "dotenv -e .env.development.local -- tsx scripts/seed-contacts.ts"
+    "db:seed": "dotenv -e .env.development.local -- tsx scripts/seed-contacts.ts",
+    "test:gmail-webhook": "tsx scripts/test-gmail-webhook.ts"
   },
   "dependencies": {
     "@ag-ui/client": "^0.0.40",

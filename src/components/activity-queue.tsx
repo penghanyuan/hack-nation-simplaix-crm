@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { useActivityQueueStore } from "@/stores/activity-queue-store"
 import { useActivityActionsStore } from "@/stores/activity-actions-store"
 import { useCopilotReadable } from "@copilotkit/react-core"
+import { useEmailNotifications } from "@/hooks/use-email-notifications"
 
 // Fetcher function for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -44,6 +45,10 @@ function formatTimestamp(date: Date): string {
 
 export function ActivityQueue() {
   const [statusText, setStatusText] = useState<string>("")
+  
+  // Listen for real-time email notifications
+  // When new emails arrive, this triggers the update via Zustand store
+  useEmailNotifications();
   
   // Use Zustand store for update state
   const { isUpdating: storeIsUpdating, setIsUpdating: setStoreIsUpdating } = useActivityQueueStore()
@@ -204,16 +209,22 @@ export function ActivityQueue() {
       const totalPendingEmails = emailSyncData?.results?.created || 0
       const totalPendingTranscripts = transcriptSyncData?.results?.created || 0
       const totalPending = totalPendingEmails + totalPendingTranscripts
-
+      console.log('totalPending', totalPending)
       if (totalPending > 0) {
         setStatusText(`Found ${totalPendingEmails} emails and ${totalPendingTranscripts} transcripts to analyze`)
       }
+      console.log('emailSyncSuccess', emailSyncSuccess)
+      console.log('transcriptSyncSuccess', transcriptSyncSuccess)
+      console.log('emailSyncData', emailSyncData)
+      console.log('transcriptSyncData', transcriptSyncData)
 
       // Step 2: Analyze pending emails (after sync completes)
+      // Always try to analyze, even if no NEW emails were created
+      // (there might be pending emails from webhook or previous syncs)
       let emailAnalysisResult = null
-      if (emailSyncSuccess && totalPendingEmails > 0) {
+      if (emailSyncSuccess) {
         try {
-          setStatusText(`Analyzing emails and transcripts (0/${totalPending})...`)
+          setStatusText(`Checking for pending emails to analyze...`)
           console.log('🤖 Starting analysis of pending emails...')
           const analyzeResponse = await fetch('/api/emails/analyze-pending', {
             method: 'POST',
@@ -225,7 +236,13 @@ export function ActivityQueue() {
             console.log('✅ Email analysis complete:', emailAnalysisResult)
 
             const emailsProcessed = emailAnalysisResult.results?.processed || 0
-            setStatusText(`Analyzing emails and transcripts (${emailsProcessed}/${totalPending})...`)
+            const activitiesCreated = emailAnalysisResult.results?.activities || 0
+            
+            if (emailsProcessed > 0) {
+              setStatusText(`Analyzed ${emailsProcessed} email(s), created ${activitiesCreated} activity(ies)`)
+            } else {
+              setStatusText(`No pending emails to analyze`)
+            }
 
             // Revalidate activities cache to show new activities
             await mutate()

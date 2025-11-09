@@ -266,3 +266,123 @@ export function extractDomain(email: string): string {
   return parts.length === 2 ? parts[1].toLowerCase() : '';
 }
 
+/**
+ * Setup Gmail push notifications via Cloud Pub/Sub
+ */
+export interface WatchResponse {
+  historyId: string;
+  expiration: string;
+}
+
+export async function setupGmailWatch(
+  oauth2Client: OAuth2Client,
+  topicName: string = 'gmail-push'
+): Promise<WatchResponse> {
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  
+  const response = await gmail.users.watch({
+    userId: 'me',
+    requestBody: {
+      labelIds: ['INBOX'],
+      labelFilterBehavior: 'INCLUDE',
+      topicName: `projects/${process.env.GOOGLE_PROJECT_ID}/topics/${topicName}`
+    }
+  });
+  
+  return {
+    historyId: response.data.historyId || '',
+    expiration: response.data.expiration || ''
+  };
+}
+
+/**
+ * Stop Gmail push notifications
+ */
+export async function stopGmailWatch(oauth2Client: OAuth2Client): Promise<void> {
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  await gmail.users.stop({ userId: 'me' });
+}
+
+/**
+ * Fetch new emails since a specific historyId
+ */
+export async function fetchEmailsSinceHistory(
+  oauth2Client: OAuth2Client,
+  startHistoryId: string
+): Promise<GmailEmail[]> {
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  
+  try {
+    // Get history of changes since the last historyId
+    const historyResponse = await gmail.users.history.list({
+      userId: 'me',
+      startHistoryId,
+      historyTypes: ['messageAdded'],
+      labelId: 'INBOX'
+    });
+    
+    const history = historyResponse.data.history || [];
+    const messageIds = new Set<string>();
+    
+    // Collect all new message IDs
+    for (const historyItem of history) {
+      if (historyItem.messagesAdded) {
+        for (const addedMessage of historyItem.messagesAdded) {
+          if (addedMessage.message?.id) {
+            messageIds.add(addedMessage.message.id);
+          }
+        }
+      }
+    }
+    
+    if (messageIds.size === 0) {
+      return [];
+    }
+    
+    // Fetch full details for each new message
+    const emails: GmailEmail[] = [];
+    
+    for (const messageId of messageIds) {
+      try {
+        const fullMessage = await gmail.users.messages.get({
+          userId: 'me',
+          id: messageId,
+          format: 'full',
+        });
+        
+        const headers = fullMessage.data.payload?.headers || [];
+        const parsed = parseHeaders(headers);
+        
+        let body = '';
+        const payload = fullMessage.data.payload;
+        
+        // Handle different email structures
+        if (payload?.body?.data) {
+          body = decodeBody(payload.body.data);
+        } else if (payload?.parts) {
+          body = extractTextFromParts(payload.parts);
+        }
+        
+        emails.push({
+          id: messageId,
+          threadId: fullMessage.data.threadId || '',
+          from: parsed.from,
+          to: parsed.to,
+          cc: parsed.cc,
+          subject: parsed.subject,
+          body: body || fullMessage.data.snippet || '',
+          date: new Date(parsed.date),
+          snippet: fullMessage.data.snippet || '',
+        });
+      } catch (error) {
+        console.error(`Error fetching message ${messageId}:`, error);
+      }
+    }
+    
+    return emails;
+  } catch (error) {
+    console.error('Error fetching history:', error);
+    return [];
+  }
+}
+

@@ -16,6 +16,22 @@ export async function POST() {
     const pendingEmails = await getPendingEmails();
 
     if (pendingEmails.length === 0) {
+      console.log('⚠️ No pending emails found');
+      
+      // Debug: Check if there are ANY emails in the database
+      const { listEmails } = await import('@/services/emailService');
+      const allEmails = await listEmails();
+      console.log(`📊 Total emails in database: ${allEmails.length}`);
+      
+      if (allEmails.length > 0) {
+        console.log('📋 Email statuses:', allEmails.slice(0, 5).map(e => ({
+          gmailId: e.gmailId,
+          subject: e.subject.substring(0, 30),
+          status: e.status,
+          createdAt: e.createdAt
+        })));
+      }
+      
       return NextResponse.json({
         success: true,
         message: 'No pending emails to analyze',
@@ -29,6 +45,11 @@ export async function POST() {
     }
 
     console.log(`📧 Found ${pendingEmails.length} pending emails`);
+    console.log('📋 Pending email details:', pendingEmails.map(e => ({
+      gmailId: e.gmailId,
+      subject: e.subject.substring(0, 40),
+      status: e.status
+    })));
 
     const results = {
       total: pendingEmails.length,

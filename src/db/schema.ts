@@ -165,6 +165,8 @@ export const userSettings = pgTable('user_settings', {
   gmailAccessToken: text('gmail_access_token'),
   gmailRefreshToken: text('gmail_refresh_token'),
   gmailTokenExpiry: timestamp('gmail_token_expiry'),
+  gmailHistoryId: text('gmail_history_id'),
+  gmailWatchExpiration: timestamp('gmail_watch_expiration'),
   autoApproveMode: boolean('auto_approve_mode').default(false).notNull(),
   lastGmailSync: timestamp('last_gmail_sync'),
   lastActivitySync: timestamp('last_activity_sync'),

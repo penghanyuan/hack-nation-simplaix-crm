@@ -84,3 +84,20 @@ export async function ensureUserSettings(userId: string = DEFAULT_USER_ID) {
   if (existing) return existing;
   return createUserSettings(userId, {});
 }
+
+export async function updateGmailWatch(
+  userId: string,
+  historyId: string,
+  expiration: Date
+) {
+  return upsertUserSettings(userId, {
+    gmailHistoryId: historyId,
+    gmailWatchExpiration: expiration,
+  });
+}
+
+export async function updateGmailHistoryId(userId: string, historyId: string) {
+  return upsertUserSettings(userId, {
+    gmailHistoryId: historyId,
+  });
+}

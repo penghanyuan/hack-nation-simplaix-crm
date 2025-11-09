@@ -8,6 +8,7 @@ interface ActivityQueueState {
 
 export const useActivityQueueStore = create<ActivityQueueState>((set) => ({
   isUpdating: false,
+  syncAll: false,
   triggerUpdate: () => {
     // This will be called by the frontend tool
     // The actual update logic is in the ActivityQueue component
