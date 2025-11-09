@@ -73,8 +73,12 @@ export async function POST() {
         // Update status to processing
         await updateEmail(email.id, { status: 'processing' });
 
+        // Get folder from email metadata
+        const emailMetadata = email.metadata as Record<string, unknown> || {};
+        const folder = emailMetadata.folder as 'inbox' | 'sent' || 'inbox';
+
         // Prepare email data for analysis
-        const emailData: EmailData = {
+        const emailData: EmailData & { folder?: 'inbox' | 'sent' } = {
           subject: email.subject,
           body: email.body,
           from: {
@@ -83,6 +87,7 @@ export async function POST() {
           },
           to: email.toEmail || undefined,
           date: email.receivedAt.toISOString(),
+          folder,
         };
 
         // Analyze the email with tool-based contact/task lookup
@@ -92,6 +97,7 @@ export async function POST() {
           contacts: analysis.contacts.length,
           contactUpdates: analysis.contactUpdates?.length || 0,
           tasks: analysis.tasks.length,
+          deals: analysis.deals?.length || 0,
         });
 
         let activitiesCreated = 0;
@@ -143,6 +149,23 @@ export async function POST() {
           activitiesCreated++;
         }
 
+        // Create activity for each extracted deal (from sent emails)
+        if (analysis.deals && analysis.deals.length > 0) {
+          for (const dealData of analysis.deals) {
+            await createPendingActivity({
+              entityType: 'deal',
+              action: 'create',
+              sourceType: 'email',
+              extractedData: dealData,
+              sourceInteractionId: null,
+              sourceEmailSubject: email.subject,
+              sourceEmailFrom: email.fromEmail,
+              sourceEmailDate: email.receivedAt,
+            });
+            activitiesCreated++;
+          }
+        }
+
         // Update email with analysis results
         await updateEmail(email.id, {
           status: 'processed',
@@ -153,6 +176,8 @@ export async function POST() {
               contactCount: analysis.contacts.length,
               contactUpdateCount: analysis.contactUpdates?.length || 0,
               taskCount: analysis.tasks.length,
+              dealCount: analysis.deals?.length || 0,
+              folder,
               analyzedAt: new Date().toISOString(),
             },
           },

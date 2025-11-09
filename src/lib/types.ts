@@ -17,6 +17,6 @@ export interface Activity {
   title: string
   description: string
   timestamp: Date
-  entityType: "contact" | "task"
+  entityType: "contact" | "task" | "deal"
   status: ActivityStatus
 }

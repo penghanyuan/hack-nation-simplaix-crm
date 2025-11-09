@@ -22,7 +22,7 @@ import { useActivityQueueStore } from "@/stores/activity-queue-store"
 import { useActivityActionsStore } from "@/stores/activity-actions-store"
 import { useCopilotReadable } from "@copilotkit/react-core"
 import { useEmailNotifications } from "@/hooks/use-email-notifications"
-import type { ContactActivityPayload, TaskActivityPayload } from "@/lib/activity-payloads"
+import type { ContactActivityPayload, TaskActivityPayload, DealActivityPayload } from "@/lib/activity-payloads"
 
 // Fetcher function for SWR
 const fetcher = (url: string) => fetch(url).then((res) => res.json())
@@ -48,7 +48,19 @@ function isTaskActivityPayload(data: unknown): data is TaskActivityPayload {
     data &&
       typeof data === 'object' &&
       'title' in data &&
-      typeof (data as { title: unknown }).title === 'string'
+      typeof (data as { title: unknown }).title === 'string' &&
+      !('email' in data) &&
+      !('stage' in data)
+  )
+}
+
+function isDealActivityPayload(data: unknown): data is DealActivityPayload {
+  return Boolean(
+    data &&
+      typeof data === 'object' &&
+      'title' in data &&
+      'stage' in data &&
+      typeof (data as { stage: unknown }).stage === 'string'
   )
 }
 
@@ -649,6 +661,8 @@ function ActivityCard({
                   "border-transparent text-[10px] sm:text-xs font-medium px-2 sm:px-2.5 py-0.5",
                   entityType === 'contact'
                     ? "bg-purple-100 text-purple-700"
+                    : entityType === 'deal'
+                    ? "bg-emerald-100 text-emerald-700"
                     : "bg-blue-100 text-blue-700"
                 )}
               >
@@ -782,6 +796,9 @@ function ActivityCard({
               {entityType === 'task' && isTaskActivityPayload(fullActivityData.extractedData) && (
                 <TaskDetails data={fullActivityData.extractedData} />
               )}
+              {entityType === 'deal' && isDealActivityPayload(fullActivityData.extractedData) && (
+                <DealDetails data={fullActivityData.extractedData} />
+              )}
             </div>
           )}
 
@@ -805,6 +822,8 @@ function ActivityCard({
                 ? 'Update Contact' 
                 : entityType === 'contact'
                 ? 'Create Contact'
+                : entityType === 'deal'
+                ? 'Create Deal'
                 : 'Accept & Close'}
             </Button>
             <Button
@@ -955,6 +974,58 @@ function TaskDetails({ data }: { data: TaskActivityPayload }) {
           <div className="col-span-2">
             <span className="font-medium">Contact Emails:</span>
             <p className="text-neutral-600">{data.contactEmails.join(', ')}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Helper component to display deal details
+function DealDetails({ data }: { data: DealActivityPayload }) {
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="grid grid-cols-2 gap-2">
+        <div className="col-span-2">
+          <span className="font-medium">Title:</span>
+          <p className="text-neutral-600">{data.title}</p>
+        </div>
+        {data.companyName && (
+          <div>
+            <span className="font-medium">Company:</span>
+            <p className="text-neutral-600">{data.companyName}</p>
+          </div>
+        )}
+        {data.contactEmail && (
+          <div>
+            <span className="font-medium">Contact Email:</span>
+            <p className="text-neutral-600">{data.contactEmail}</p>
+          </div>
+        )}
+        {data.stage && (
+          <div>
+            <span className="font-medium">Stage:</span>
+            <p className="text-neutral-600 capitalize">{data.stage.replace('_', ' ')}</p>
+          </div>
+        )}
+        {data.amount && (
+          <div>
+            <span className="font-medium">Amount:</span>
+            <p className="text-neutral-600">${data.amount.toLocaleString()}</p>
+          </div>
+        )}
+        {data.nextAction && (
+          <div className="col-span-2">
+            <span className="font-medium">Next Action:</span>
+            <p className="text-neutral-600">{data.nextAction}</p>
+          </div>
+        )}
+        {data.nextActionDate && (
+          <div>
+            <span className="font-medium">Next Action Date:</span>
+            <p className="text-neutral-600">
+              {new Date(data.nextActionDate).toLocaleDateString()}
+            </p>
           </div>
         )}
       </div>

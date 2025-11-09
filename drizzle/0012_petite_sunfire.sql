@@ -1,0 +1,1 @@
+ALTER TYPE "public"."activity_entity_type" ADD VALUE 'deal';

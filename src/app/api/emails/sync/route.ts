@@ -110,6 +110,7 @@ export async function POST(request: Request) {
             snippet: gmailEmail.snippet,
             to: gmailEmail.to,
             cc: gmailEmail.cc,
+            folder: gmailEmail.folder, // Store whether it's inbox or sent
             syncedAt: new Date().toISOString(),
           },
         });

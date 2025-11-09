@@ -85,6 +85,13 @@
       "when": 1762667877582,
       "tag": "0011_odd_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1762681873759,
+      "tag": "0012_petite_sunfire",
+      "breakpoints": true
     }
   ]
 }

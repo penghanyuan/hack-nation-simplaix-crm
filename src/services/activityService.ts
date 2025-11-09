@@ -3,7 +3,7 @@ import { activities, type Activity } from '@/db/schema';
 import { desc, eq } from 'drizzle-orm';
 
 export type ActivitySeed = {
-  entityType: 'contact' | 'task';
+  entityType: 'contact' | 'task' | 'deal';
   action?: 'create' | 'update';
   sourceType?: 'email' | 'meeting' | 'linkedin';
   extractedData: Record<string, unknown>;

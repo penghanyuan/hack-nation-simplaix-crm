@@ -27,3 +27,13 @@ export type TaskActivityPayload = {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   dueDate?: string;
 };
+
+export type DealActivityPayload = {
+  title: string;
+  companyName?: string;
+  contactEmail?: string;
+  stage: 'new' | 'in_discussion' | 'proposal' | 'won' | 'lost';
+  amount?: number;
+  nextAction?: string;
+  nextActionDate?: string;
+};
